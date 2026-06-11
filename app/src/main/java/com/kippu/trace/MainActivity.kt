@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.AutoAwesomeMotion
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SentimentVeryDissatisfied
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -301,6 +302,7 @@ sealed class Screen(val route: String, val icon: ImageVector) {
     }
     data object Settings : Screen("settings", Icons.Default.Settings)
     data object Editor : Screen("editor", Icons.Default.Add)
+    data object Timeline : Screen("timeline", Icons.Default.Timeline)
 }
 
 @Composable
@@ -324,7 +326,7 @@ fun MainApp(
         }
     }
 
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     
     // 同步底部栏可见性
     // 使用 targetPage 防止跨页跳转闪烁
@@ -375,6 +377,13 @@ fun MainApp(
                                 themeMode = themeMode,
                                 onThemeModeChange = onThemeModeChange
                             )
+                            3 -> com.kippu.trace.ui.screens.TimelineScreen(
+                                events = events,
+                                onEventClick = { event ->
+                                    navController.navigate(Screen.Detail.createRoute(event.id))
+                                },
+                                onAddClick = { navController.navigate(Screen.Editor.route) },
+                            )
                         }
                     }
                 }
@@ -423,14 +432,14 @@ fun MainApp(
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 // 增加内边距 防止阴影被裁剪
-                Box(modifier = Modifier.padding(bottom = 24.dp, top = 12.dp, start = 12.dp, end = 12.dp)) {
+                Box(modifier = Modifier.padding(bottom = 24.dp, top = 12.dp, start = 8.dp, end = 8.dp)) {
                     Surface(
-                        shape = CircleShape,
+                        shape = RoundedCornerShape(32.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
                         tonalElevation = 8.dp,
                         shadowElevation = 4.dp,
                         modifier = Modifier
-                            .width(260.dp)
+                            .width(320.dp)
                             .height(64.dp)
                     ) {
                         Row(
@@ -455,6 +464,16 @@ fun MainApp(
                                 selected = isDetailSelected,
                                 onClick = {
                                     coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                                }
+                            )
+
+                            // 时间轴
+                            val isTimelineSelected = pagerState.targetPage == 3
+                            CustomNavBarItem(
+                                icon = { NavIconWithPulse(icon = Screen.Timeline.icon, isSelected = isTimelineSelected) },
+                                selected = isTimelineSelected,
+                                onClick = {
+                                    coroutineScope.launch { pagerState.animateScrollToPage(3) }
                                 }
                             )
 

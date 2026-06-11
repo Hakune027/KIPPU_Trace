@@ -91,4 +91,8 @@
     <string name="restore_failed">Restore failed: %s</string>
     <string name="unknown_error">Unknown error</string>
     <string name="select_date">Select Date</string>
+    <string name="timeline_page_title">Timeline</string>
+    <string name="timeline_subtitle">Every moment in the river of time deserves to be remembered</string>
+    <string name="timeline_empty_hint">Leave your first mark\nin the river of time</string>
+    <string name="timeline_event_count">%d moments</string>
 </resources>
