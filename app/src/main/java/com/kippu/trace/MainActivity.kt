@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesomeMotion
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
@@ -305,6 +306,7 @@ sealed class Screen(val route: String, val icon: ImageVector) {
     data object Timeline : Screen("timeline", Icons.Default.Timeline)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainApp(
     events: List<DateEvent> = emptyList(),
@@ -326,11 +328,11 @@ fun MainApp(
         }
     }
 
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     
     // 同步底部栏可见性
     // 使用 targetPage 防止跨页跳转闪烁
-    val showBottomBar = currentDestination?.route == "main_pager" && pagerState.targetPage != 1 && pagerState.targetPage != 2
+    val showBottomBar = currentDestination?.route == "main_pager" && pagerState.targetPage != 1
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -354,6 +356,7 @@ fun MainApp(
                             0 -> com.kippu.trace.ui.screens.HomeScreen(
                                 events = events,
                                 onAddClick = { navController.navigate(Screen.Editor.route) },
+                                onTimelineClick = { navController.navigate(Screen.Timeline.route) },
                                 onEventClick = { event ->
                                     navController.navigate(Screen.Detail.createRoute(event.id))
                                 },
@@ -373,13 +376,7 @@ fun MainApp(
                                     onUpdateEvent = { onAddEvent(it) }
                                 )
                             }
-                            2 -> com.kippu.trace.ui.screens.TimelineScreen(
-                                events = events,
-                                onEventClick = { event ->
-                                    navController.navigate(Screen.Detail.createRoute(event.id))
-                                },
-                            )
-                            3 -> com.kippu.trace.ui.screens.SettingsScreen(
+                            2 -> com.kippu.trace.ui.screens.SettingsScreen(
                                 themeMode = themeMode,
                                 onThemeModeChange = onThemeModeChange
                             )
@@ -422,6 +419,36 @@ fun MainApp(
                         },
                     )
                 }
+
+                composable(
+                    route = Screen.Timeline.route,
+                    enterTransition = { fadeIn(tween(400)) },
+                    exitTransition = { fadeOut(tween(400)) },
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        com.kippu.trace.ui.screens.TimelineScreen(
+                            events = events,
+                            onEventClick = { event ->
+                                navController.navigate(Screen.Detail.createRoute(event.id))
+                            },
+                        )
+
+                        // 左上角返回按钮（浮在时间轴上方）
+                        IconButton(
+                            onClick = { navController.popBackStack() },
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .statusBarsPadding()
+                                .padding(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                    }
+                }
             }
 
             AnimatedVisibility(
@@ -438,7 +465,7 @@ fun MainApp(
                         tonalElevation = 8.dp,
                         shadowElevation = 4.dp,
                         modifier = Modifier
-                            .width(320.dp)
+                            .width(260.dp)
                             .height(64.dp)
                     ) {
                         Row(
@@ -466,23 +493,13 @@ fun MainApp(
                                 }
                             )
 
-                            // 时间轴
-                            val isTimelineSelected = pagerState.targetPage == 2
-                            CustomNavBarItem(
-                                icon = { NavIconWithPulse(icon = Screen.Timeline.icon, isSelected = isTimelineSelected) },
-                                selected = isTimelineSelected,
-                                onClick = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
-                                }
-                            )
-
                             // 设置
-                            val isSettingsSelected = pagerState.targetPage == 3
+                            val isSettingsSelected = pagerState.targetPage == 2
                             CustomNavBarItem(
                                 icon = { NavIconWithPulse(icon = Screen.Settings.icon, isSelected = isSettingsSelected) },
                                 selected = isSettingsSelected,
                                 onClick = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(3) }
+                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
                                 }
                             )
                         }
