@@ -47,7 +47,11 @@ fun TimelineEventCard(
     val context = LocalContext.current
     val relative = TimeUtils.getRelativeTime(event.targetDate)
     val timeDesc = TimeUtils.formatRelativeTime(context, relative)
-    val prefix = if (event.isFuture) stringResource(R.string.label_until) else stringResource(R.string.label_since)
+    val prefix = if (TimeUtils.isFuture(event.targetDate)) {
+        stringResource(R.string.label_until)
+    } else {
+        stringResource(R.string.label_since)
+    }
     val hasBg = event.backgroundUri != null
 
     val cardShape = RoundedCornerShape(18.dp)

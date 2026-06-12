@@ -95,4 +95,5 @@
     <string name="timeline_subtitle">Every moment in the river of time deserves to be remembered</string>
     <string name="timeline_empty_hint">Leave your first mark\nin the river of time</string>
     <string name="timeline_event_count">%d moments</string>
+    <string name="timeline_now">Now</string>
 </resources>

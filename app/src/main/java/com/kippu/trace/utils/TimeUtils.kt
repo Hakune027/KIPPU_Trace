@@ -26,6 +26,14 @@ object TimeUtils {
 
     // 正确处理时区
 
+    fun isFuture(targetDateMillis: Long): Boolean {
+        val systemZone = ZoneId.systemDefault()
+        val targetDate = Instant.ofEpochMilli(targetDateMillis)
+            .atZone(ZoneId.of("UTC"))
+            .toLocalDate()
+        return LocalDate.now(systemZone).isBefore(targetDate)
+    }
+
     fun getRelativeTime(targetDateMillis: Long): RelativeTimeResult {
         val systemZone = ZoneId.systemDefault()
         

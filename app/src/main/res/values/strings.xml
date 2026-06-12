@@ -95,4 +95,5 @@
     <string name="timeline_subtitle">在时光的长河中，每一个瞬间都值得铭记</string>
     <string name="timeline_empty_hint">在时间长河中\n留下你的第一个印记</string>
     <string name="timeline_event_count">%d 个时刻</string>
+    <string name="timeline_now">现在</string>
 </resources>

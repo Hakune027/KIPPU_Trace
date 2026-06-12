@@ -330,7 +330,7 @@ fun MainApp(
     
     // 同步底部栏可见性
     // 使用 targetPage 防止跨页跳转闪烁
-    val showBottomBar = currentDestination?.route == "main_pager" && pagerState.targetPage != 1
+    val showBottomBar = currentDestination?.route == "main_pager" && pagerState.targetPage != 1 && pagerState.targetPage != 2
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -373,16 +373,15 @@ fun MainApp(
                                     onUpdateEvent = { onAddEvent(it) }
                                 )
                             }
-                            2 -> com.kippu.trace.ui.screens.SettingsScreen(
-                                themeMode = themeMode,
-                                onThemeModeChange = onThemeModeChange
-                            )
-                            3 -> com.kippu.trace.ui.screens.TimelineScreen(
+                            2 -> com.kippu.trace.ui.screens.TimelineScreen(
                                 events = events,
                                 onEventClick = { event ->
                                     navController.navigate(Screen.Detail.createRoute(event.id))
                                 },
-                                onAddClick = { navController.navigate(Screen.Editor.route) },
+                            )
+                            3 -> com.kippu.trace.ui.screens.SettingsScreen(
+                                themeMode = themeMode,
+                                onThemeModeChange = onThemeModeChange
                             )
                         }
                     }
@@ -468,22 +467,22 @@ fun MainApp(
                             )
 
                             // 时间轴
-                            val isTimelineSelected = pagerState.targetPage == 3
+                            val isTimelineSelected = pagerState.targetPage == 2
                             CustomNavBarItem(
                                 icon = { NavIconWithPulse(icon = Screen.Timeline.icon, isSelected = isTimelineSelected) },
                                 selected = isTimelineSelected,
                                 onClick = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(3) }
+                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
                                 }
                             )
 
                             // 设置
-                            val isSettingsSelected = pagerState.targetPage == 2
+                            val isSettingsSelected = pagerState.targetPage == 3
                             CustomNavBarItem(
                                 icon = { NavIconWithPulse(icon = Screen.Settings.icon, isSelected = isSettingsSelected) },
                                 selected = isSettingsSelected,
                                 onClick = {
-                                    coroutineScope.launch { pagerState.animateScrollToPage(2) }
+                                    coroutineScope.launch { pagerState.animateScrollToPage(3) }
                                 }
                             )
                         }

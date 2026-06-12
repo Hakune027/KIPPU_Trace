@@ -95,4 +95,5 @@
     <string name="timeline_subtitle">時の流れの中で、すべての瞬間が記憶に値する</string>
     <string name="timeline_empty_hint">時の流れに\n最初の印を残そう</string>
     <string name="timeline_event_count">%d の瞬間</string>
+    <string name="timeline_now">現在</string>
 </resources>
