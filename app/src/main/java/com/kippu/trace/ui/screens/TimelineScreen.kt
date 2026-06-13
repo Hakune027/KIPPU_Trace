@@ -370,9 +370,35 @@ fun TimelineScreen(
 
                         if (allAnchors.isEmpty()) return@Canvas
 
-                        val rodLen = 24.dp.toPx()
-                        val nodeRadius = 8.dp.toPx()
+                        val rodLen = 20.dp.toPx()
+                        val nodeRadius = 14.dp.toPx()  // 与光点 glowR 匹配
                         val nowNodeRadius = 30.dp.toPx()
+
+                        // 光点风格事件节点
+                        fun drawEventGlowNode(center: Offset, color: Color, twinkle: Float, pulse: Float) {
+                            val glowR = 14.dp.toPx()
+                            val coreR = 5.2.dp.toPx()
+                            val dotR = 2.dp.toPx()
+                            val brightness = 0.7f + 0.3f * (0.5f + 0.5f * sin(twinkle * 0.7f))
+                            // 外层光晕
+                            drawCircle(
+                                Brush.radialGradient(
+                                    listOf(color.copy(alpha = 0.08f * brightness), Color.Transparent),
+                                    center = center, radius = glowR
+                                ),
+                                radius = glowR, center = center
+                            )
+                            // 内层核心光
+                            drawCircle(
+                                Brush.radialGradient(
+                                    listOf(Color.White.copy(alpha = 0.40f * brightness), color.copy(alpha = 0.15f * brightness), Color.Transparent),
+                                    center = center, radius = coreR * 2f
+                                ),
+                                radius = coreR * 2f, center = center
+                            )
+                            // 中心白点
+                            drawCircle(color = Color.White.copy(alpha = 0.75f * brightness), radius = dotR, center = center)
+                        }
 
                         val eventAnchors = allAnchors.filter { !it.isNow }
                         val nowAnchor = allAnchors.find { it.isNow }
@@ -385,17 +411,15 @@ fun TimelineScreen(
                             val r = if (isNow) nowNodeRadius else nodeRadius
 
                             if (!isNow) {
-                                drawLine(accentColor.copy(alpha = 0.28f), Offset(a.x, 0f), Offset(a.x, size.height), strokeWidth = 1.dp.toPx())
+                                drawLine(accentColor.copy(alpha = 0.18f), Offset(a.x, 0f), Offset(a.x, size.height), strokeWidth = 1.dp.toPx())
+                                // 光点风格事件节点（单锚点）
+                                drawEventGlowNode(center, accentColor, starTwinkle, nowPulse)
                             }
                             if (isNow) {
                                 drawCircle(Brush.radialGradient(listOf(nowColor.copy(alpha = 0.10f * nowPulse), Color.Transparent), center = center, radius = 56.dp.toPx()), radius = 56.dp.toPx(), center = center)
-                            }
-                            drawCircle(color = surfaceColor, radius = r, center = center)
-                            drawCircle(color = if (isNow) nowColor.copy(alpha = 0.30f) else accentColor.copy(alpha = 0.30f), radius = r, center = center, style = Stroke(if (isNow) 2.dp.toPx() else 1.6.dp.toPx()))
-                            if (isNow) {
+                                drawCircle(color = surfaceColor, radius = r, center = center)
+                                drawCircle(color = nowColor.copy(alpha = 0.30f), radius = r, center = center, style = Stroke(2.dp.toPx()))
                                 drawCircle(color = nowColor.copy(alpha = 0.40f), radius = 4.dp.toPx(), center = center)
-                            } else {
-                                drawCircle(color = accentColor.copy(alpha = 0.45f), radius = 3.5.dp.toPx(), center = center)
                             }
                             return@Canvas
                         }
@@ -504,27 +528,17 @@ fun TimelineScreen(
                             }
                         }
 
-                        // ── 事件锚点连接杆 ──
+                        // ── 事件锚点连接杆（更淡的细线 + 光点风格端点）──
                         eventAnchors.forEach { a ->
                             val isLeft = a.isLeft
                             val startX = if (isLeft) a.x - rodLen else a.x + nodeRadius
                             val endX = if (isLeft) a.x - nodeRadius else a.x + rodLen
-                            drawLine(accentColor.copy(alpha = 0.28f), Offset(startX, a.y), Offset(endX, a.y), strokeWidth = 1.dp.toPx())
-                            // 连接杆端点装饰点
-                            drawCircle(color = accentColor.copy(alpha = 0.35f), radius = 1.dp.toPx(), center = Offset(startX, a.y))
-                            drawCircle(color = accentColor.copy(alpha = 0.35f), radius = 1.dp.toPx(), center = Offset(endX, a.y))
+                            drawLine(accentColor.copy(alpha = 0.14f), Offset(startX, a.y), Offset(endX, a.y), strokeWidth = 0.8.dp.toPx())
                         }
 
-                        // ── 事件锚点节点 ──
+                        // ── 事件锚点节点（光点风格，与现在节点统一）──
                         eventAnchors.forEach { a ->
-                            val center = Offset(a.x, a.y)
-                            // 节点填充 — 径向渐变
-                            drawCircle(
-                                Brush.radialGradient(listOf(surfaceColor, surfaceColor.copy(alpha = 0.65f)), center = center, radius = nodeRadius),
-                                radius = nodeRadius, center = center
-                            )
-                            drawCircle(color = accentColor.copy(alpha = 0.30f), radius = nodeRadius, center = center, style = Stroke(1.6.dp.toPx()))
-                            drawCircle(color = accentColor.copy(alpha = 0.55f), radius = 3.5.dp.toPx(), center = center)
+                            drawEventGlowNode(Offset(a.x, a.y), accentColor, starTwinkle, nowPulse)
                         }
 
                         // ──「现在」光点 ──

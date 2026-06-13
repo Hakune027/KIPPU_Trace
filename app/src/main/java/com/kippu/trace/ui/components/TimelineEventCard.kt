@@ -34,6 +34,11 @@ import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.ui.theme.AccentColor
 import com.kippu.trace.utils.TimeUtils
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
 @Composable
 fun TimelineEventCard(
@@ -57,18 +62,14 @@ fun TimelineEventCard(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 80.dp),
+            .heightIn(min = 56.dp),
         shape = cardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (hasBg) Color.Transparent else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 80.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             if (hasBg) {
                 AsyncImage(
                     model = event.backgroundUri,
@@ -94,13 +95,6 @@ fun TimelineEventCard(
                             ),
                         ),
                 )
-                // 描边
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clip(cardShape)
-                        .border(0.5.dp, AccentColor.copy(alpha = 0.25f), cardShape),
-                )
             } else {
                 // 无背景图卡片：极细边框
                 Box(
@@ -116,58 +110,71 @@ fun TimelineEventCard(
                 modifier = Modifier
                     .fillMaxHeight()
                     .width(3.dp)
-                    .padding(top = 8.dp, bottom = 8.dp)
+                    .padding(vertical = 10.dp)
                     .clip(RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp))
                     .background(AccentColor.copy(alpha = if (hasBg) 0.70f else 0.45f)),
             )
 
-            // 文字内容
+            // 文字内容：三行 — 标题 / 距今时间 / 详细日期
             Column(
-                modifier = Modifier
-                    .padding(start = 22.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
-                    .heightIn(min = 56.dp),
+                modifier = Modifier.padding(start = 18.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             ) {
                 Text(
                     event.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
                         color = if (hasBg) Color.White.copy(alpha = 0.95f)
                                 else MaterialTheme.colorScheme.onSurface,
-                        fontSize = 15.sp,
                         shadow = if (hasBg) Shadow(
                             color = Color.Black.copy(alpha = 0.45f),
                             blurRadius = 6f,
                         ) else Shadow.None,
                     ),
-                    maxLines = 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(6.dp))
-                // 时间描述 — 徽章样式
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(
-                            if (hasBg) Color.White.copy(alpha = 0.12f)
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                ) {
-                    Text(
-                        "$prefix $timeDesc",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            color = if (hasBg) Color.White.copy(alpha = 0.75f)
-                                    else MaterialTheme.colorScheme.secondary,
-                            fontSize = 11.sp,
-                            shadow = if (hasBg) Shadow(
-                                color = Color.Black.copy(alpha = 0.35f),
-                                blurRadius = 4f,
-                            ) else Shadow.None,
-                            fontWeight = FontWeight.Medium,
-                        ),
-                    )
-                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "$prefix $timeDesc",
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (hasBg) Color.White.copy(alpha = 0.80f)
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        shadow = if (hasBg) Shadow(
+                            color = Color.Black.copy(alpha = 0.35f),
+                            blurRadius = 4f,
+                        ) else Shadow.None,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(2.dp))
+                // 第三行：详细日期
+                Text(
+                    formatDetailDate(event.targetDate),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = if (hasBg) Color.White.copy(alpha = 0.45f)
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        shadow = if (hasBg) Shadow(
+                            color = Color.Black.copy(alpha = 0.20f),
+                            blurRadius = 2f,
+                        ) else Shadow.None,
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
+}
+
+private val detailDateFormatter by lazy {
+    DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault())
+}
+
+private fun formatDetailDate(targetDateMillis: Long): String {
+    return Instant.ofEpochMilli(targetDateMillis)
+        .atZone(ZoneId.systemDefault())
+        .format(detailDateFormatter)
 }
