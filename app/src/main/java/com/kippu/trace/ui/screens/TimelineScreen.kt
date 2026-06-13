@@ -53,6 +53,7 @@ import com.kippu.trace.utils.ThemePreferences
 import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.utils.TimelineScaleMode
 import java.time.LocalDateTime
+import kotlin.math.absoluteValue
 import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.cos
@@ -232,7 +233,6 @@ val surfaceColor = MaterialTheme.colorScheme.surface
             val contentAlpha = remember { Animatable(0f) }
             var hasInitialScrolled by rememberSaveable { mutableStateOf(false) }
 
-            // 首次进入时：等待布局 → 滚动到「现在」 → 淡入显示
             // 从详情页返回时不重置位置
             LaunchedEffect(hasInitialScrolled) {
                 if (hasInitialScrolled) {
@@ -421,14 +421,16 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                                 return sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
                             }
 
-                            val path = Path()
-                            path.moveTo(anchors.first().x, anchors.first().y)
+                            // 云雾泛光 — 构建双 Path（Android native 用于模糊，Compose 用于主线）
+                            val nativePath = android.graphics.Path()
+                            val composePath = Path()
+                            nativePath.moveTo(anchors.first().x, anchors.first().y)
+                            composePath.moveTo(anchors.first().x, anchors.first().y)
                             for (i in 0 until anchors.size - 1) {
                                 val p0 = anchors.getOrElse(i - 1) { anchors.first() }
                                 val p1 = anchors[i]
                                 val p2 = anchors[i + 1]
                                 val p3 = anchors.getOrElse(i + 2) { anchors.last() }
-
                                 val d01 = anchorDist(p0, p1)
                                 val d12 = anchorDist(p1, p2)
                                 val d23 = anchorDist(p2, p3)
@@ -439,10 +441,38 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                                 val cp1y = p1.y + (p2.y - p0.y) * s1
                                 val cp2x = p2.x - (p3.x - p1.x) * s2
                                 val cp2y = p2.y - (p3.y - p1.y) * s2
-                                path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+                                nativePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
+                                composePath.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
                             }
 
-                            drawPath(path, accentColor.copy(alpha = 0.55f), style = Stroke(1.4.dp.toPx()))
+                            val glowPaint = android.graphics.Paint().apply {
+                                isAntiAlias = true
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                            }
+                            // 外层大范围柔光
+                            glowPaint.maskFilter = android.graphics.BlurMaskFilter(14.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                            glowPaint.strokeWidth = 4.dp.toPx()
+                            glowPaint.color = android.graphics.Color.argb(
+                                (0.12f * 255).toInt(),
+                                (accentColor.red * 255).toInt(),
+                                (accentColor.green * 255).toInt(),
+                                (accentColor.blue * 255).toInt()
+                            )
+                            drawContext.canvas.nativeCanvas.drawPath(nativePath, glowPaint)
+                            // 中层柔光
+                            glowPaint.maskFilter = android.graphics.BlurMaskFilter(6.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                            glowPaint.strokeWidth = 2.5.dp.toPx()
+                            glowPaint.color = android.graphics.Color.argb(
+                                (0.25f * 255).toInt(),
+                                (accentColor.red * 255).toInt(),
+                                (accentColor.green * 255).toInt(),
+                                (accentColor.blue * 255).toInt()
+                            )
+                            drawContext.canvas.nativeCanvas.drawPath(nativePath, glowPaint)
+                            // 主线（用 Compose Path）
+                            drawPath(composePath, accentColor.copy(alpha = 0.55f), style = Stroke(1.4.dp.toPx()))
 
                             // 向两端延伸的尾巴（沿曲线方向继续延伸并渐隐）
                             if (extTop) {
@@ -453,6 +483,12 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                                 } else { extX = anchors[0].x }
                                 val tailLen = 160.dp.toPx()
                                 val tailEnd = (anchors[0].y - tailLen).coerceAtLeast(-tailLen)
+                                // 尾巴泛光
+                                drawLine(
+                                    Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.20f), Color.Transparent), startY = anchors[0].y, endY = tailEnd),
+                                    Offset(anchors[0].x, anchors[0].y), Offset(extX, tailEnd),
+                                    strokeWidth = 5.dp.toPx()
+                                )
                                 drawLine(
                                     Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.55f), Color.Transparent), startY = anchors[0].y, endY = tailEnd),
                                     Offset(anchors[0].x, anchors[0].y), Offset(extX, tailEnd),
@@ -468,6 +504,12 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                                 } else { extX = anchors[n].x }
                                 val tailLen = 160.dp.toPx()
                                 val tailEnd = (anchors[n].y + tailLen).coerceAtMost(vpH + tailLen)
+                                // 尾巴泛光
+                                drawLine(
+                                    Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.20f), Color.Transparent), startY = anchors[n].y, endY = tailEnd),
+                                    Offset(anchors[n].x, anchors[n].y), Offset(extX, tailEnd),
+                                    strokeWidth = 5.dp.toPx()
+                                )
                                 drawLine(
                                     Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.55f), Color.Transparent), startY = anchors[n].y, endY = tailEnd),
                                     Offset(anchors[n].x, anchors[n].y), Offset(extX, tailEnd),
@@ -486,28 +528,41 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                         nowAnchor?.let { now ->
                             if (pastAnchors.isNotEmpty()) {
                                 val last = pastAnchors.last()
+                                val prev = pastAnchors.getOrElse(pastAnchors.lastIndex - 1) { last }
                                 val sx = last.x; val sy = last.y
                                 val ex = now.x; val ey = now.y - nowNodeRadius * 1.9f
-                                val dy = ey - sy; val dx = ex - sx
-                                val cp1 = Offset(sx + dx * 0.12f, sy + dy * 0.40f)
-                                val cp2 = Offset(sx + dx * 0.65f, sy + dy * 0.75f)
+                                val dy = ey - sy
+                                // cp1: 沿样条退出方向平滑出发 (last - prev)
+                                val tx = last.x - prev.x
+                                val ty = (last.y - prev.y).coerceAtLeast(1f)
+                                val cp1 = Offset(sx + tx * 0.4f, sy + ty * 0.4f)
+                                // cp2: 平滑到达 now
+                                val cp2 = Offset(sx + (ex - sx) * 0.65f, sy + dy * 0.75f)
                                 val extPath = Path().apply {
                                     moveTo(sx, sy)
                                     cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
                                 }
+                                drawPath(extPath, Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.10f), Color.Transparent), startY = sy, endY = ey), style = Stroke(5.dp.toPx()))
                                 drawPath(extPath, Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.38f), Color.Transparent), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
                             }
                             if (futureAnchors.isNotEmpty()) {
                                 val first = futureAnchors.first()
+                                val next = futureAnchors.getOrElse(1) { first }
                                 val sx = now.x; val sy = now.y + nowNodeRadius * 1.6f
                                 val ex = first.x; val ey = first.y
-                                val dy = ey - sy; val dx = ex - sx
+                                val dy = ey - sy
+                                val dx = ex - sx
+                                // cp1: 从 now 平滑出发
                                 val cp1 = Offset(sx + dx * 0.35f, sy + dy * 0.25f)
-                                val cp2 = Offset(sx + dx * 0.88f, sy + dy * 0.60f)
+                                // cp2: 与样条入口切线对齐 (next - first)
+                                val tx = next.x - first.x
+                                val ty = (next.y - first.y).coerceAtLeast(1f)
+                                val cp2 = Offset(ex - tx * 0.4f, ey - ty * 0.4f)
                                 val extPath = Path().apply {
                                     moveTo(sx, sy)
                                     cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
                                 }
+                                drawPath(extPath, Brush.verticalGradient(listOf(Color.Transparent, accentColor.copy(alpha = 0.10f)), startY = sy, endY = ey), style = Stroke(5.dp.toPx()))
                                 drawPath(extPath, Brush.verticalGradient(listOf(Color.Transparent, accentColor.copy(alpha = 0.38f)), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
                             }
                         }
@@ -626,7 +681,7 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                                         anchorPositions = anchorPositions,
                                         contentRootOffset = contentRootOffset,
                                         // 「现在」节点上下间距
-                                        modifier = Modifier.padding(top = timeGapSpacing + 120.dp, bottom = 120.dp)
+                                        modifier = Modifier.padding(top = timeGapSpacing + 100.dp, bottom = 100.dp)
                                     )
                                 }
                                 is TimelineItem.Event -> {
