@@ -2,6 +2,7 @@ package com.kippu.trace.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -33,12 +34,10 @@ import coil.compose.AsyncImage
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.ui.theme.AccentColor
+import com.kippu.trace.utils.DateFormatters
 import com.kippu.trace.utils.TimeUtils
 import java.time.Instant
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
-import java.util.Locale
 
 @Composable
 fun TimelineEventCard(
@@ -55,6 +54,7 @@ fun TimelineEventCard(
         stringResource(R.string.label_since)
     }
     val hasBg = event.backgroundUri != null
+    val isDark = isSystemInDarkTheme()
 
     val cardShape = RoundedCornerShape(18.dp)
 
@@ -65,7 +65,11 @@ fun TimelineEventCard(
             .heightIn(min = 56.dp),
         shape = cardShape,
         colors = CardDefaults.cardColors(
-            containerColor = if (hasBg) Color.Transparent else MaterialTheme.colorScheme.surface
+            containerColor = when {
+                hasBg -> Color.Transparent
+                isDark -> MaterialTheme.colorScheme.surface.copy(alpha = 0.50f)
+                else -> MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+            }
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
@@ -79,7 +83,6 @@ fun TimelineEventCard(
                         .clip(cardShape),
                     contentScale = ContentScale.Crop,
                 )
-                // 三段式渐变遮罩
                 Box(
                     Modifier
                         .matchParentSize()
@@ -96,16 +99,14 @@ fun TimelineEventCard(
                         ),
                 )
             } else {
-                // 无背景图卡片：极细边框
                 Box(
                     Modifier
                         .matchParentSize()
                         .clip(cardShape)
-                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f), cardShape),
+                        .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f), cardShape),
                 )
             }
 
-            // 左侧点缀色条
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -115,7 +116,6 @@ fun TimelineEventCard(
                     .background(AccentColor.copy(alpha = if (hasBg) 0.70f else 0.45f)),
             )
 
-            // 文字内容：三行 — 标题 / 距今时间 / 详细日期
             Column(
                 modifier = Modifier.padding(start = 18.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             ) {
@@ -150,7 +150,6 @@ fun TimelineEventCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
-                // 第三行：详细日期
                 Text(
                     formatDetailDate(event.targetDate),
                     style = MaterialTheme.typography.labelSmall.copy(
@@ -169,12 +168,8 @@ fun TimelineEventCard(
     }
 }
 
-private val detailDateFormatter by lazy {
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(Locale.getDefault())
-}
-
 private fun formatDetailDate(targetDateMillis: Long): String {
     return Instant.ofEpochMilli(targetDateMillis)
         .atZone(ZoneId.systemDefault())
-        .format(detailDateFormatter)
+        .format(DateFormatters.date)
 }

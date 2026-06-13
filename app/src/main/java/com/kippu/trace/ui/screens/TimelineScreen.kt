@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -44,11 +45,10 @@ import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.TimelineData
 import com.kippu.trace.ui.components.TimelineEventCard
+import com.kippu.trace.utils.DateFormatters
 import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.utils.TimelineScaleMode
 import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.cos
@@ -81,13 +81,12 @@ fun TimelineScreen(
     // ViewModel 已预计算所有数据，直接使用
     val timelineItems = remember(data) {
         data.items.map { info ->
-            if (info.isNow) TimelineItem.Now(info.epochDay)
-            else TimelineItem.Event(info.event!!, info.epochDay)
+            if (info.isNow) TimelineItem.Now(info.epochDay, info.isLeft)
+            else TimelineItem.Event(info.event!!, info.epochDay, info.isLeft)
         }
     }
     val dayGaps = data.dayGaps
     val nowItemIndex = data.nowItemIndex
-    val itemIsLeft = remember(data) { data.items.map { it.isLeft } }
     val sortedEvents = remember(data) { data.items.mapNotNull { it.event } }
 
     // 根据刻度模式选择最大间隔
@@ -217,20 +216,24 @@ fun TimelineScreen(
             val starColor = MaterialTheme.colorScheme.onBackground
             val scrollState = rememberScrollState()
             val contentAlpha = remember { Animatable(0f) }
+            var hasInitialScrolled by rememberSaveable { mutableStateOf(false) }
 
-            // 等待所有锚点布局完成 → 滚动到「现在」 → 淡入显示
-            LaunchedEffect(Unit) {
-                // 等待所有节点锚点就位
+            // 首次进入时：等待布局 → 滚动到「现在」 → 淡入显示
+            // 从详情页返回时不重置位置
+            LaunchedEffect(hasInitialScrolled) {
+                if (hasInitialScrolled) {
+                    contentAlpha.snapTo(1f)
+                    return@LaunchedEffect
+                }
                 snapshotFlow { anchorPositions.size }
                     .first { it >= timelineItems.size }
-                // 滚动到「现在」节点
                 anchorPositions[nowItemIndex]?.let { nowPos ->
                     val viewportH = scrollState.viewportSize
                     val target = (nowPos.y - viewportH / 2f).toInt().coerceAtLeast(0)
                     scrollState.scrollTo(target)
                 }
-                // 淡入
                 contentAlpha.animateTo(1f, tween(300))
+                hasInitialScrolled = true
             }
 
             // 极淡星云光晕（alpha 控制在 1~2%，干净若隐若现）
@@ -366,7 +369,7 @@ fun TimelineScreen(
                         val allAnchors = anchorPositions
                             .toList()
                             .sortedBy { it.first }
-                            .map { (idx, pos) -> Anchor(idx, pos.x, pos.y, isLeft = itemIsLeft[idx], isNow = idx == nowItemIndex) }
+                            .map { (idx, pos) -> Anchor(idx, pos.x, pos.y, isLeft = timelineItems[idx].isLeft, isNow = idx == nowItemIndex) }
 
                         if (allAnchors.isEmpty()) return@Canvas
 
@@ -379,7 +382,7 @@ fun TimelineScreen(
                             val glowR = 14.dp.toPx()
                             val coreR = 5.2.dp.toPx()
                             val dotR = 2.dp.toPx()
-                            val brightness = 0.7f + 0.3f * (0.5f + 0.5f * sin(twinkle * 0.7f))
+                            val brightness = 0.85f + 0.15f * sin(twinkle * 0.7f)
                             // 外层光晕
                             drawCircle(
                                 Brush.radialGradient(
@@ -616,7 +619,7 @@ fun TimelineScreen(
                         Spacer(Modifier.height(80.dp))
 
                         timelineItems.forEachIndexed { index, item ->
-                            val isLeft = itemIsLeft[index]
+                            val isLeft = item.isLeft
 
                             val timeGapSpacing = if (index > 0 && index - 1 < dayGaps.size) {
                                 val gapIndex = index - 1
@@ -671,29 +674,23 @@ fun TimelineScreen(
             }
         }
 
-        // ── 顶部渐隐遮罩 ──
+        // ── 上下边缘渐隐遮罩（统一高度 48dp）──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(48.dp)
                 .align(Alignment.TopCenter)
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(bgColor, Color.Transparent),
-                    )
+                    Brush.verticalGradient(colors = listOf(bgColor, Color.Transparent))
                 )
         )
-
-        // ── 底部渐隐遮罩 ──
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(48.dp)
                 .align(Alignment.BottomCenter)
                 .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, bgColor),
-                    )
+                    Brush.verticalGradient(colors = listOf(Color.Transparent, bgColor))
                 )
         )
     }
@@ -747,24 +744,23 @@ private fun TimelineNowNode(
 
 private sealed class TimelineItem {
     abstract val epochDay: Long
+    abstract val isLeft: Boolean
 
     data class Event(
         val event: DateEvent,
         override val epochDay: Long,
+        override val isLeft: Boolean,
     ) : TimelineItem()
 
     data class Now(
         override val epochDay: Long,
+        override val isLeft: Boolean,
     ) : TimelineItem()
 }
 
-// 缓存的格式化器（DateTimeFormatter 线程安全，可复用）
-private val timeFormatter by lazy { DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault()) }
-private val dateFormatter by lazy { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.LONG).withLocale(Locale.getDefault()) }
-
 private fun currentTimeText(): Pair<String, String> {
     val now = LocalDateTime.now()
-    return Pair(now.format(timeFormatter), now.format(dateFormatter))
+    return Pair(now.format(DateFormatters.time), now.format(DateFormatters.date))
 }
 
 private fun timelineGapSpacing(daysDiff: Float, maxDayGap: Float) = when {
