@@ -2,7 +2,9 @@ package com.kippu.trace.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +48,8 @@ import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.TimelineData
 import com.kippu.trace.ui.components.TimelineEventCard
 import com.kippu.trace.utils.DateFormatters
+import com.kippu.trace.utils.ThemeMode
+import com.kippu.trace.utils.ThemePreferences
 import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.utils.TimelineScaleMode
 import java.time.LocalDateTime
@@ -209,11 +213,21 @@ fun TimelineScreen(
                 }
             }
         } else {
-            val accentColor = MaterialTheme.colorScheme.primary
-            val surfaceColor = MaterialTheme.colorScheme.surface
-            val nowColor = MaterialTheme.colorScheme.secondary
+            // 浅色模式：白金配色；深色模式：原主题黑白配色
+            val themeMode = ThemePreferences.getThemeMode(LocalContext.current)
+            val isDark = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            val goldColor = Color(0xFFC8966C)
+            val goldLight = Color(0xFFE8C9A0)
+            val goldCore = if (isDark) Color(0xFFFFF8E1) else Color(0xFFFFECB3)
+val surfaceColor = MaterialTheme.colorScheme.surface
+            val nowColor = goldColor
             val nowLabel = stringResource(R.string.timeline_now)
-            val starColor = MaterialTheme.colorScheme.onBackground
+            val accentColor = goldColor
+            val starColor = Color.White
             val scrollState = rememberScrollState()
             val contentAlpha = remember { Animatable(0f) }
             var hasInitialScrolled by rememberSaveable { mutableStateOf(false) }
@@ -236,40 +250,11 @@ fun TimelineScreen(
                 hasInitialScrolled = true
             }
 
-            // 极淡星云光晕（alpha 控制在 1~2%，干净若隐若现）
-            val nebulae = remember(accentColor) {
-                listOf(
-                    NebulaCloud(0.50f, 0.28f, 0.58f, 0.015f, accentColor, 0.5f),
-                    NebulaCloud(0.28f, 0.50f, 0.35f, 0.010f, accentColor, 0.4f),
-                    NebulaCloud(0.72f, 0.55f, 0.38f, 0.008f, accentColor, 0.6f),
-                )
-            }
-
             // ── 远景星空（固定层，随滚动做极慢视差）──
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val parallax = scrollState.value.toFloat() * 0.01f
                 val vpW = size.width
                 val vpH = size.height
-
-                // ── 极淡星云光晕 ──
-                nebulae.forEach { cloud ->
-                    val cx = cloud.x * vpW
-                    val cy = cloud.y * vpH - parallax * cloud.parallaxFactor
-                    val radius = cloud.radius * vpW
-                    drawCircle(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                cloud.color.copy(alpha = cloud.peakAlpha),
-                                cloud.color.copy(alpha = cloud.peakAlpha * 0.35f),
-                                Color.Transparent,
-                            ),
-                            center = Offset(cx, cy),
-                            radius = radius,
-                        ),
-                        radius = radius,
-                        center = Offset(cx, cy),
-                    )
-                }
 
                 stars.forEach { star ->
                     var cy = (star.y * vpH - parallax) % vpH
@@ -325,26 +310,22 @@ fun TimelineScreen(
                         quadraticTo(midX - tdy * midW, midY + tdx * midW, hx - perpX, hy - perpY)
                         close()
                     }
-                    drawPath(tailPath, starColor.copy(alpha = alpha * 0.35f))
-                    drawPath(tailPath, starColor.copy(alpha = alpha * 0.12f), style = Stroke(2.dp.toPx()))
-
-                    // 头部多层光晕
+                    drawPath(tailPath, goldLight.copy(alpha = alpha * 0.30f))
+                    drawPath(tailPath, goldColor.copy(alpha = alpha * 0.10f), style = Stroke(2.dp.toPx()))
                     drawCircle(
-                        Brush.radialGradient(listOf(starColor.copy(alpha = alpha * 0.5f), Color.Transparent), center = Offset(hx, hy), radius = 8.dp.toPx()),
+                        Brush.radialGradient(listOf(goldLight.copy(alpha = alpha * 0.5f), Color.Transparent), center = Offset(hx, hy), radius = 8.dp.toPx()),
                         radius = 8.dp.toPx(), center = Offset(hx, hy)
                     )
                     drawCircle(
-                        Brush.radialGradient(listOf(starColor.copy(alpha = alpha * 0.7f), Color.Transparent), center = Offset(hx, hy), radius = 4.dp.toPx()),
+                        Brush.radialGradient(listOf(goldColor.copy(alpha = alpha * 0.7f), Color.Transparent), center = Offset(hx, hy), radius = 4.dp.toPx()),
                         radius = 4.dp.toPx(), center = Offset(hx, hy)
                     )
-                    drawCircle(color = starColor.copy(alpha = alpha), radius = 1.5.dp.toPx(), center = Offset(hx, hy))
-                    drawCircle(color = Color.White.copy(alpha = alpha * 0.6f), radius = 0.6.dp.toPx(), center = Offset(hx + 0.3.dp.toPx(), hy - 0.3.dp.toPx()))
-
-                    // 尾迹碎粒（使用预计算粒子，避免每帧创建 Random）
+                    drawCircle(color = goldColor.copy(alpha = alpha), radius = 1.5.dp.toPx(), center = Offset(hx, hy))
+                    drawCircle(color = goldLight.copy(alpha = alpha * 0.8f), radius = 0.6.dp.toPx(), center = Offset(hx + 0.3.dp.toPx(), hy - 0.3.dp.toPx()))
                     m.particles.forEach { p ->
                         val px = hx + tdx * tailLen * p.t + p.offsetXDp.dp.toPx()
                         val py = hy + tdy * tailLen * p.t + p.offsetYDp.dp.toPx()
-                        drawCircle(color = starColor.copy(alpha = alpha * 0.25f * (1f - p.t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
+                        drawCircle(color = goldLight.copy(alpha = alpha * 0.25f * (1f - p.t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
                     }
                 }
             }
@@ -394,13 +375,13 @@ fun TimelineScreen(
                             // 内层核心光
                             drawCircle(
                                 Brush.radialGradient(
-                                    listOf(Color.White.copy(alpha = 0.40f * brightness), color.copy(alpha = 0.15f * brightness), Color.Transparent),
+                                    listOf(goldCore.copy(alpha = 0.55f * brightness), color.copy(alpha = 0.15f * brightness), Color.Transparent),
                                     center = center, radius = coreR * 2f
                                 ),
                                 radius = coreR * 2f, center = center
                             )
-                            // 中心白点
-                            drawCircle(color = Color.White.copy(alpha = 0.75f * brightness), radius = dotR, center = center)
+                            // 中心亮金点
+                            drawCircle(color = goldCore.copy(alpha = 0.85f * brightness), radius = dotR, center = center)
                         }
 
                         val eventAnchors = allAnchors.filter { !it.isNow }
@@ -578,16 +559,16 @@ fun TimelineScreen(
                                 )
                             }
 
-                            // 光点核心 — 多层发光点
+                            // 光点核心 — 亮金多层发光点
                             val coreR = 4.5.dp.toPx()
                             drawCircle(
                                 Brush.radialGradient(
-                                    listOf(Color.White.copy(alpha = 0.9f), nowColor.copy(alpha = 0.6f), Color.Transparent),
+                                    listOf(goldCore.copy(alpha = 0.9f), nowColor.copy(alpha = 0.6f), Color.Transparent),
                                     center = center, radius = coreR * 2.5f
                                 ),
                                 radius = coreR * 2.5f, center = center
                             )
-                            drawCircle(color = Color.White.copy(alpha = 0.95f), radius = coreR, center = center)
+                            drawCircle(color = goldCore.copy(alpha = 0.95f), radius = coreR, center = center)
                             drawCircle(color = Color.White.copy(alpha = 0.50f), radius = coreR * 0.5f, center = center)
 
                             // 「NOW」标注
@@ -612,10 +593,16 @@ fun TimelineScreen(
                     }
 
                     // 层2: 卡片列表
-                    Column(
+                    BoxWithConstraints(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                        contentAlignment = Alignment.TopCenter,
                     ) {
+                        val isTablet = maxWidth >= 600.dp
+                        val contentWidth = if (isTablet) maxWidth * 0.6f else maxWidth
+                        Column(
+                            modifier = Modifier.width(contentWidth),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
                         Spacer(Modifier.height(80.dp))
 
                         timelineItems.forEachIndexed { index, item ->
@@ -669,6 +656,7 @@ fun TimelineScreen(
                         }
 
                         Spacer(Modifier.height(100.dp))
+                    }
                     }
                 }
             }
@@ -827,11 +815,4 @@ private data class MeteorEvent(
     val particles: List<MeteorParticle>, // 预计算尾迹碎粒
 )
 
-private data class NebulaCloud(
-    val x: Float,           // 0..1 相对位置
-    val y: Float,           // 0..1 相对位置
-    val radius: Float,      // 相对 vpW
-    val peakAlpha: Float,   // 中心最大透明度
-    val color: Color,       // 基础色
-    val parallaxFactor: Float, // 视差系数
-)
+
