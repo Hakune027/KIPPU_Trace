@@ -96,4 +96,7 @@
     <string name="timeline_empty_hint">在时间长河中\n留下你的第一个印记</string>
     <string name="timeline_event_count">%d 个时刻</string>
     <string name="timeline_now">现在</string>
+    <string name="timeline_scale_mode">时间轴刻度样式</string>
+    <string name="timeline_scale_unified">统一比例尺</string>
+    <string name="timeline_scale_dual">双比例尺（过去/未来独立）</string>
 </resources>

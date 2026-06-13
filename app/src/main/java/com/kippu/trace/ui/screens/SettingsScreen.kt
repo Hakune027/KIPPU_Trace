@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +31,8 @@ import com.kippu.trace.utils.LanguageMode
 import com.kippu.trace.utils.LanguagePreferences
 import com.kippu.trace.utils.ThemeMode
 import com.kippu.trace.utils.ThemePreferences
+import com.kippu.trace.utils.TimelineScaleMode
+import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.viewmodel.EventViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,7 +55,9 @@ fun SettingsScreen(
     val developingFeatureName = remember { mutableStateOf("") }
     val showThemeDialog = remember { mutableStateOf(false) }
     val showLanguageDialog = remember { mutableStateOf(false) }
+    val showTimelineScaleDialog = remember { mutableStateOf(false) }
     val currentLanguageMode = remember { mutableStateOf(LanguagePreferences.getLanguageMode(context)) }
+    val currentTimelineScaleMode = remember { mutableStateOf(TimelinePreferences.getScaleMode(context)) }
 
     // 备份弹窗状态
     val showBackupDialog = remember { mutableStateOf(false) }
@@ -370,6 +375,68 @@ fun SettingsScreen(
         )
     }
 
+    // 时间轴刻度样式弹窗
+    if (showTimelineScaleDialog.value) {
+        AlertDialog(
+            onDismissRequest = { showTimelineScaleDialog.value = false },
+            title = { Text(stringResource(R.string.timeline_scale_mode)) },
+            text = {
+                Column {
+                    TimelineScaleMode.entries.forEach { mode ->
+                        val isSelected = mode == currentTimelineScaleMode.value
+                        Surface(
+                            onClick = {
+                                currentTimelineScaleMode.value = mode
+                                TimelinePreferences.setScaleMode(context, mode)
+                                showTimelineScaleDialog.value = false
+                            },
+                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant
+                                    else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = TimelinePreferences.scaleModeLabel(mode, context),
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                                else MaterialTheme.colorScheme.onSurface
+                                    )
+                                )
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                        if (mode != TimelineScaleMode.entries.last()) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTimelineScaleDialog.value = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -411,6 +478,13 @@ fun SettingsScreen(
                         subtitle = LanguagePreferences.languageModeLabel(currentLanguageMode.value, context)
                     ) {
                         showLanguageDialog.value = true
+                    }
+                    SettingsItem(
+                        title = stringResource(R.string.timeline_scale_mode),
+                        icon = Icons.Default.Timeline,
+                        subtitle = TimelinePreferences.scaleModeLabel(currentTimelineScaleMode.value, context)
+                    ) {
+                        showTimelineScaleDialog.value = true
                     }
                 }
             }

@@ -96,4 +96,7 @@
     <string name="timeline_empty_hint">Leave your first mark\nin the river of time</string>
     <string name="timeline_event_count">%d moments</string>
     <string name="timeline_now">Now</string>
+    <string name="timeline_scale_mode">Timeline Scale Style</string>
+    <string name="timeline_scale_unified">Unified Scale</string>
+    <string name="timeline_scale_dual">Dual Scale (Past/Future independent)</string>
 </resources>

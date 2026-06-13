@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -41,14 +42,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
+import com.kippu.trace.model.TimelineData
 import com.kippu.trace.ui.components.TimelineEventCard
-import com.kippu.trace.utils.TimeUtils
-import java.time.LocalDate
+import com.kippu.trace.utils.TimelinePreferences
+import com.kippu.trace.utils.TimelineScaleMode
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.absoluteValue
 import kotlin.math.sqrt
 import kotlin.math.PI
 import kotlin.math.cos
@@ -74,37 +74,25 @@ import androidx.compose.ui.draw.alpha
  */
 @Composable
 fun TimelineScreen(
-    events: List<DateEvent>,
+    data: TimelineData,
     onEventClick: (DateEvent) -> Unit,
 ) {
-    val sortedEvents = remember(events) { events.sortedBy { it.targetDate } }
-    val todayEpochDay = LocalDate.now(ZoneId.systemDefault()).toEpochDay()
-    val timelineItems = remember(sortedEvents, todayEpochDay) {
-        (sortedEvents.map { event ->
-            TimelineItem.Event(event, TimeUtils.toEpochDay(event.targetDate))
-        } + TimelineItem.Now(todayEpochDay))
-            .sortedWith(
-                compareBy<TimelineItem> { it.epochDay }
-                    .thenBy { if (it is TimelineItem.Now) 1 else 0 }
-            )
-    }
-    val dayGaps = remember(timelineItems) {
-        timelineItems.zipWithNext { a, b ->
-            (b.epochDay - a.epochDay).absoluteValue.toFloat()
+    val scaleMode = TimelinePreferences.getScaleMode(LocalContext.current)
+    // ViewModel 已预计算所有数据，直接使用
+    val timelineItems = remember(data) {
+        data.items.map { info ->
+            if (info.isNow) TimelineItem.Now(info.epochDay)
+            else TimelineItem.Event(info.event!!, info.epochDay)
         }
     }
-    val nowItemIndex = remember(timelineItems) {
-        timelineItems.indexOfFirst { it is TimelineItem.Now }
-    }
-    // 预计算每个 item 的左右侧，避免在 Canvas 绘制循环中重复 O(N²) 计算
-    val itemIsLeft = remember(timelineItems) {
-        var eventCount = 0
-        timelineItems.map { item ->
-            when (item) {
-                is TimelineItem.Event -> eventCount++ % 2 == 0
-                is TimelineItem.Now -> eventCount % 2 == 0
-            }
-        }
+    val dayGaps = data.dayGaps
+    val nowItemIndex = data.nowItemIndex
+    val itemIsLeft = remember(data) { data.items.map { it.isLeft } }
+    val sortedEvents = remember(data) { data.items.mapNotNull { it.event } }
+
+    // 根据刻度模式选择最大间隔
+    val globalMaxDayGap = remember(dayGaps) {
+        dayGaps.maxOrNull()?.coerceAtLeast(1f) ?: 1f
     }
     val maxPastDayGap = remember(dayGaps, nowItemIndex) {
         dayGaps.take(nowItemIndex.coerceAtLeast(0)).maxOrNull()?.coerceAtLeast(1f) ?: 1f
@@ -418,12 +406,7 @@ fun TimelineScreen(
 
                         // ── Catmull-Rom → 三次贝塞尔 样条绘制 ──
                         fun drawSpline(anchors: List<Anchor>, extTop: Boolean, extBottom: Boolean) {
-                            if (anchors.isEmpty()) return
-                            if (anchors.size == 1) {
-                                val a = anchors.first()
-                                drawLine(accentColor.copy(alpha = 0.14f), Offset(a.x, 0f), Offset(a.x, vpH), strokeWidth = 1.dp.toPx())
-                                return
-                            }
+                            if (anchors.size < 2) return
 
                             fun anchorDist(a: Anchor, b: Anchor): Float {
                                 val dx = a.x - b.x; val dy = a.y - b.y
@@ -623,8 +606,11 @@ fun TimelineScreen(
 
                             val timeGapSpacing = if (index > 0 && index - 1 < dayGaps.size) {
                                 val gapIndex = index - 1
-                                val maxGapForSide = if (gapIndex < nowItemIndex) maxPastDayGap else maxFutureDayGap
-                                timelineGapSpacing(dayGaps[gapIndex], maxGapForSide)
+                                val maxGap = when (scaleMode) {
+                                    TimelineScaleMode.UNIFIED -> globalMaxDayGap
+                                    TimelineScaleMode.DUAL -> if (gapIndex < nowItemIndex) maxPastDayGap else maxFutureDayGap
+                                }
+                                timelineGapSpacing(dayGaps[gapIndex], maxGap)
                             } else {
                                 28.dp
                             }

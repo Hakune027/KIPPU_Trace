@@ -58,6 +58,7 @@ import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
+import com.kippu.trace.model.TimelineData
 import com.kippu.trace.ui.theme.KIPPU_TraceTheme
 import com.kippu.trace.utils.LanguageMode
 import com.kippu.trace.utils.LanguagePreferences
@@ -135,6 +136,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val eventViewModel: EventViewModel = viewModel()
             val events by eventViewModel.allEvents.collectAsState()
+            val timelineData by eventViewModel.timelineData.collectAsState()
             val context = this
             var themeMode by remember { mutableStateOf(ThemePreferences.getThemeMode(context)) }
             val darkTheme = when (themeMode) {
@@ -154,6 +156,7 @@ class MainActivity : ComponentActivity() {
             KIPPU_TraceTheme(darkTheme = darkTheme) {
                 MainApp(
                     events = events,
+                    timelineData = timelineData,
                     themeMode = themeMode,
                     onThemeModeChange = { mode ->
                         themeMode = mode
@@ -310,6 +313,7 @@ sealed class Screen(val route: String, val icon: ImageVector) {
 @Composable
 fun MainApp(
     events: List<DateEvent> = emptyList(),
+    timelineData: TimelineData = TimelineData(emptyList(), emptyList(), 0),
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     onAddEvent: (DateEvent) -> Unit = {},
@@ -427,7 +431,7 @@ fun MainApp(
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         com.kippu.trace.ui.screens.TimelineScreen(
-                            events = events,
+                            data = timelineData,
                             onEventClick = { event ->
                                 navController.navigate(Screen.Detail.createRoute(event.id))
                             },

@@ -96,4 +96,7 @@
     <string name="timeline_empty_hint">時の流れに\n最初の印を残そう</string>
     <string name="timeline_event_count">%d の瞬間</string>
     <string name="timeline_now">現在</string>
+    <string name="timeline_scale_mode">タイムライン目盛スタイル</string>
+    <string name="timeline_scale_unified">統一目盛</string>
+    <string name="timeline_scale_dual">二重目盛（過去/未来独立）</string>
 </resources>
