@@ -12,22 +12,21 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -41,32 +40,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kippu.trace.R
-import com.kippu.trace.ui.theme.AccentColor
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.ui.components.TimelineEventCard
-import java.time.Instant
+import com.kippu.trace.utils.TimeUtils
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.sqrt
-import kotlinx.coroutines.delay
 import kotlin.math.PI
-import kotlin.math.roundToInt
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
 
 /**
  * 时间轴页面
@@ -84,7 +81,7 @@ fun TimelineScreen(
     val todayEpochDay = LocalDate.now(ZoneId.systemDefault()).toEpochDay()
     val timelineItems = remember(sortedEvents, todayEpochDay) {
         (sortedEvents.map { event ->
-            TimelineItem.Event(event, eventEpochDay(event.targetDate))
+            TimelineItem.Event(event, TimeUtils.toEpochDay(event.targetDate))
         } + TimelineItem.Now(todayEpochDay))
             .sortedWith(
                 compareBy<TimelineItem> { it.epochDay }
@@ -99,6 +96,16 @@ fun TimelineScreen(
     val nowItemIndex = remember(timelineItems) {
         timelineItems.indexOfFirst { it is TimelineItem.Now }
     }
+    // 预计算每个 item 的左右侧，避免在 Canvas 绘制循环中重复 O(N²) 计算
+    val itemIsLeft = remember(timelineItems) {
+        var eventCount = 0
+        timelineItems.map { item ->
+            when (item) {
+                is TimelineItem.Event -> eventCount++ % 2 == 0
+                is TimelineItem.Now -> eventCount % 2 == 0
+            }
+        }
+    }
     val maxPastDayGap = remember(dayGaps, nowItemIndex) {
         dayGaps.take(nowItemIndex.coerceAtLeast(0)).maxOrNull()?.coerceAtLeast(1f) ?: 1f
     }
@@ -111,6 +118,8 @@ fun TimelineScreen(
 
     val bgColor = MaterialTheme.colorScheme.background
 
+    val twoPi = 2f * PI.toFloat()
+
     val infiniteTransition = rememberInfiniteTransition()
 
     val nowPulse by infiniteTransition.animateFloat(
@@ -120,7 +129,7 @@ fun TimelineScreen(
     )
 
     val starTwinkle by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 2f * PI.toFloat(),
+        initialValue = 0f, targetValue = twoPi,
         animationSpec = infiniteRepeatable(tween(5000, easing = LinearOutSlowInEasing), RepeatMode.Reverse),
         label = "starTwinkle"
     )
@@ -132,7 +141,7 @@ fun TimelineScreen(
     )
 
     val nowRotation by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = 2f * PI.toFloat(),
+        initialValue = 0f, targetValue = twoPi,
         animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Restart),
         label = "nowRotation"
     )
@@ -156,23 +165,32 @@ fun TimelineScreen(
         all
     }
 
-    // 流星：从屏幕外滑入，跨越屏幕后滑出
+    // 流星：从屏幕外滑入，跨越屏幕后滑出（预计算三角函数和尾迹粒子）
     val meteors = remember {
         val rng = java.util.Random(77)
         (0 until 7).map { i ->
-            // 角度分布更广：~10°~80°，方向有变化
             val angle = PI.toFloat() * (0.05f + rng.nextFloat() * 0.40f)
-            // 起点分散在不同位置
             val margin = 0.25f + rng.nextFloat() * 0.40f
             val startX = -margin
             val startY = -margin * (0.2f + rng.nextFloat() * 0.8f)
+            // 预计算尾迹碎粒（避免每帧创建 Random）
+            val particles = (0 until 5).map {
+                MeteorParticle(
+                    t = 0.15f + rng.nextFloat() * 0.7f,
+                    offsetXDp = rng.nextFloat() * 6f - 3f,
+                    offsetYDp = rng.nextFloat() * 6f - 3f,
+                )
+            }
             MeteorEvent(
-                trigger = i / 5f + rng.nextFloat() * 0.08f, // 均匀分布触发时机
+                trigger = i / 5f + rng.nextFloat() * 0.08f,
                 startX = startX,
                 startY = startY,
                 angle = angle,
+                cosAngle = cos(angle),
+                sinAngle = sin(angle),
                 length = 80f + rng.nextFloat() * 70f,
                 speed = 2.00f + rng.nextFloat() * 1.20f,
+                particles = particles,
             )
         }
     }
@@ -204,38 +222,63 @@ fun TimelineScreen(
                 }
             }
         } else {
-            val curveColor = MaterialTheme.colorScheme.outline
             val accentColor = MaterialTheme.colorScheme.primary
             val surfaceColor = MaterialTheme.colorScheme.surface
             val nowColor = MaterialTheme.colorScheme.secondary
             val nowLabel = stringResource(R.string.timeline_now)
             val starColor = MaterialTheme.colorScheme.onBackground
             val scrollState = rememberScrollState()
+            val contentAlpha = remember { Animatable(0f) }
+
+            // 等待所有锚点布局完成 → 滚动到「现在」 → 淡入显示
+            LaunchedEffect(Unit) {
+                // 等待所有节点锚点就位
+                snapshotFlow { anchorPositions.size }
+                    .first { it >= timelineItems.size }
+                // 滚动到「现在」节点
+                anchorPositions[nowItemIndex]?.let { nowPos ->
+                    val viewportH = scrollState.viewportSize
+                    val target = (nowPos.y - viewportH / 2f).toInt().coerceAtLeast(0)
+                    scrollState.scrollTo(target)
+                }
+                // 淡入
+                contentAlpha.animateTo(1f, tween(300))
+            }
+
+            // 极淡星云光晕（alpha 控制在 1~2%，干净若隐若现）
+            val nebulae = remember(accentColor) {
+                listOf(
+                    NebulaCloud(0.50f, 0.28f, 0.58f, 0.015f, accentColor, 0.5f),
+                    NebulaCloud(0.28f, 0.50f, 0.35f, 0.010f, accentColor, 0.4f),
+                    NebulaCloud(0.72f, 0.55f, 0.38f, 0.008f, accentColor, 0.6f),
+                )
+            }
 
             // ── 远景星空（固定层，随滚动做极慢视差）──
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val parallax = scrollState.value.toFloat() * 0.01f
-                val vpW = size.width; val vpH = size.height
-                                // ── 极淡银河/星云氛围 ──
-                val nebulaBrush = Brush.radialGradient(
-                    colors = listOf(
-                        AccentColor.copy(alpha = 0.012f),
-                        AccentColor.copy(alpha = 0.005f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(vpW * 0.5f, vpH * 0.35f),
-                    radius = vpW * 0.60f,
-                )
-                drawRect(nebulaBrush, size = Size(vpW, vpH))
-                val nebulaBrush2 = Brush.radialGradient(
-                    colors = listOf(
-                        nowColor.copy(alpha = 0.008f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(vpW * 0.72f, vpH * 0.65f),
-                    radius = vpW * 0.45f,
-                )
-                drawRect(nebulaBrush2, size = Size(vpW, vpH))
+                val vpW = size.width
+                val vpH = size.height
+
+                // ── 极淡星云光晕 ──
+                nebulae.forEach { cloud ->
+                    val cx = cloud.x * vpW
+                    val cy = cloud.y * vpH - parallax * cloud.parallaxFactor
+                    val radius = cloud.radius * vpW
+                    drawCircle(
+                        Brush.radialGradient(
+                            colors = listOf(
+                                cloud.color.copy(alpha = cloud.peakAlpha),
+                                cloud.color.copy(alpha = cloud.peakAlpha * 0.35f),
+                                Color.Transparent,
+                            ),
+                            center = Offset(cx, cy),
+                            radius = radius,
+                        ),
+                        radius = radius,
+                        center = Offset(cx, cy),
+                    )
+                }
 
                 stars.forEach { star ->
                     var cy = (star.y * vpH - parallax) % vpH
@@ -264,13 +307,13 @@ fun TimelineScreen(
                         prog > 0.82f -> ((1f - prog) / 0.18f).coerceIn(0f, 1f)
                         else -> 1f
                     } * 0.85f
-                    val dx = cos(m.angle) * vpW * m.speed * prog
-                    val dy = sin(m.angle) * vpW * m.speed * prog
+                    val dx = m.cosAngle * vpW * m.speed * prog
+                    val dy = m.sinAngle * vpW * m.speed * prog
                     val hx = m.startX * vpW + dx
                     val hy = m.startY * vpH + dy - parallax * 0.5f
                     val tailLen = m.length.dp.toPx()
-                    val tdx = -cos(m.angle)
-                    val tdy = -sin(m.angle)
+                    val tdx = -m.cosAngle
+                    val tdy = -m.sinAngle
 
                     // 仅绘制屏幕可见部分（性能优化）
                     if (hx < -tailLen || hx > vpW + tailLen || hy < -tailLen || hy > vpH + tailLen) return@forEach
@@ -306,13 +349,11 @@ fun TimelineScreen(
                     drawCircle(color = starColor.copy(alpha = alpha), radius = 1.5.dp.toPx(), center = Offset(hx, hy))
                     drawCircle(color = Color.White.copy(alpha = alpha * 0.6f), radius = 0.6.dp.toPx(), center = Offset(hx + 0.3.dp.toPx(), hy - 0.3.dp.toPx()))
 
-                    // 尾迹碎粒
-                    val rng = java.util.Random(m.hashCode().toLong())
-                    repeat(5) {
-                        val t = 0.15f + rng.nextFloat() * 0.7f
-                        val px = hx + tdx * tailLen * t + rng.nextFloat() * 6.dp.toPx() - 3.dp.toPx()
-                        val py = hy + tdy * tailLen * t + rng.nextFloat() * 6.dp.toPx() - 3.dp.toPx()
-                        drawCircle(color = starColor.copy(alpha = alpha * 0.25f * (1f - t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
+                    // 尾迹碎粒（使用预计算粒子，避免每帧创建 Random）
+                    m.particles.forEach { p ->
+                        val px = hx + tdx * tailLen * p.t + p.offsetXDp.dp.toPx()
+                        val py = hy + tdy * tailLen * p.t + p.offsetYDp.dp.toPx()
+                        drawCircle(color = starColor.copy(alpha = alpha * 0.25f * (1f - p.t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
                     }
                 }
             }
@@ -320,7 +361,8 @@ fun TimelineScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState),
+                    .verticalScroll(scrollState)
+                    .alpha(contentAlpha.value),
             ) {
                 Box(
                     modifier = Modifier
@@ -336,7 +378,7 @@ fun TimelineScreen(
                         val allAnchors = anchorPositions
                             .toList()
                             .sortedBy { it.first }
-                            .map { (idx, pos) -> Anchor(idx, pos.x, pos.y, isLeft = eventSideIndex(timelineItems, idx) % 2 == 0, isNow = idx == nowItemIndex) }
+                            .map { (idx, pos) -> Anchor(idx, pos.x, pos.y, isLeft = itemIsLeft[idx], isNow = idx == nowItemIndex) }
 
                         if (allAnchors.isEmpty()) return@Canvas
 
@@ -383,6 +425,11 @@ fun TimelineScreen(
                                 return
                             }
 
+                            fun anchorDist(a: Anchor, b: Anchor): Float {
+                                val dx = a.x - b.x; val dy = a.y - b.y
+                                return sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                            }
+
                             val path = Path()
                             path.moveTo(anchors.first().x, anchors.first().y)
                             for (i in 0 until anchors.size - 1) {
@@ -391,13 +438,9 @@ fun TimelineScreen(
                                 val p2 = anchors[i + 1]
                                 val p3 = anchors.getOrElse(i + 2) { anchors.last() }
 
-                                fun dist(a: Anchor, b: Anchor): Float {
-                                    val dx = a.x - b.x; val dy = a.y - b.y
-                                    return sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                                }
-                                val d01 = dist(p0, p1)
-                                val d12 = dist(p1, p2)
-                                val d23 = dist(p2, p3)
+                                val d01 = anchorDist(p0, p1)
+                                val d12 = anchorDist(p1, p2)
+                                val d23 = anchorDist(p2, p3)
                                 val t0 = 0f; val t1 = d01; val t2 = d01 + d12; val t3 = d01 + d12 + d23
                                 val s1 = (t2 - t1) / (3f * (t2 - t0).coerceAtLeast(1f))
                                 val s2 = (t2 - t1) / (3f * (t3 - t1).coerceAtLeast(1f))
@@ -501,145 +544,82 @@ fun TimelineScreen(
                             drawCircle(color = accentColor.copy(alpha = 0.55f), radius = 3.5.dp.toPx(), center = center)
                         }
 
-                                                // ──「现在」光点 ──
-
+                        // ──「现在」光点 ──
                         nowAnchor?.let { a ->
-
                             val center = Offset(a.x, a.y)
 
-
-
                             // 外层柔和光晕（脉冲）
-
                             val glowRadius = 40.dp.toPx() + (nowPulse - 0.85f) / 0.15f * 16.dp.toPx()
-
                             drawCircle(
-
                                 Brush.radialGradient(
-
                                     listOf(nowColor.copy(alpha = 0.12f * nowPulse), Color.Transparent),
-
                                     center = center, radius = glowRadius
-
                                 ),
-
                                 radius = glowRadius, center = center
-
                             )
-
-
 
                             // 4 条旋转光射线（尖端以小圆点收尾）
-
                             val rayLen = 24.dp.toPx()
-
                             (0 until 4).forEach { i ->
-
                                 val angle = nowRotation + i.toFloat() * (PI.toFloat() * 0.5f)
-
                                 val ex = center.x + cos(angle) * rayLen
-
                                 val ey = center.y + sin(angle) * rayLen
-
                                 val rayMod = 0.5f + 0.5f * cos(starTwinkle * 2f + i.toFloat() * 1.57f)
-
                                 val rayAlpha = 0.20f * nowPulse * rayMod
-
                                 drawLine(
-
                                     nowColor.copy(alpha = rayAlpha),
-
                                     center, Offset(ex, ey),
-
                                     strokeWidth = 1.5.dp.toPx()
-
                                 )
-
                                 // 射线尖端光点
-
                                 drawCircle(
-
                                     nowColor.copy(alpha = rayAlpha * 1.5f),
-
                                     radius = 1.2.dp.toPx(), center = Offset(ex, ey)
-
                                 )
-
                             }
-
-
 
                             // 光点核心 — 多层发光点
-
                             val coreR = 4.5.dp.toPx()
-
                             drawCircle(
-
                                 Brush.radialGradient(
-
                                     listOf(Color.White.copy(alpha = 0.9f), nowColor.copy(alpha = 0.6f), Color.Transparent),
-
                                     center = center, radius = coreR * 2.5f
-
                                 ),
-
                                 radius = coreR * 2.5f, center = center
-
                             )
-
                             drawCircle(color = Color.White.copy(alpha = 0.95f), radius = coreR, center = center)
-
                             drawCircle(color = Color.White.copy(alpha = 0.50f), radius = coreR * 0.5f, center = center)
 
-
-
-                            // 「NOW」标注 — 更轻量的文字
-
+                            // 「NOW」标注
                             val textPaint = android.graphics.Paint().apply {
-
                                 color = android.graphics.Color.argb(
-
                                     (nowColor.alpha * 0.50f).toInt(),
-
                                     (nowColor.red * 255).toInt(),
-
                                     (nowColor.green * 255).toInt(),
-
                                     (nowColor.blue * 255).toInt()
-
                                 )
-
                                 textSize = 10.sp.toPx()
-
                                 isAntiAlias = true
-
                                 typeface = android.graphics.Typeface.DEFAULT
-
                             }
-
                             drawContext.canvas.nativeCanvas.drawText(
-
                                 nowLabel,
-
                                 a.x + 20.dp.toPx(),
-
                                 a.y + 3.sp.toPx(),
-
                                 textPaint
-
                             )
-
-                        }                    }
+                        }
+                    }
 
                     // 层2: 卡片列表
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Spacer(Modifier.height(50.dp))
+                        Spacer(Modifier.height(80.dp))
 
                         timelineItems.forEachIndexed { index, item ->
-                            val isLeft = eventSideIndex(timelineItems, index) % 2 == 0
+                            val isLeft = itemIsLeft[index]
 
                             val timeGapSpacing = if (index > 0 && index - 1 < dayGaps.size) {
                                 val gapIndex = index - 1
@@ -649,29 +629,14 @@ fun TimelineScreen(
                                 28.dp
                             }
 
-                            // 卡片入场动画
-                            val entryAnim = remember { Animatable(0f) }
-                            LaunchedEffect(Unit) {
-                                delay((index * 70L).coerceAtMost(800L))
-                                entryAnim.animateTo(1f, spring(
-                                    dampingRatio = Spring.DampingRatioLowBouncy,
-                                    stiffness = Spring.StiffnessMediumLow
-                                ))
-                            }
-                            val density = LocalDensity.current.density
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .alpha(entryAnim.value)
-                                    .offset { IntOffset(0, ((1f - entryAnim.value) * density * 20).roundToInt()) }
-                            ) {
                             when (item) {
                                 is TimelineItem.Now -> {
                                     TimelineNowNode(
                                         index = index,
                                         anchorPositions = anchorPositions,
                                         contentRootOffset = contentRootOffset,
-                                        modifier = Modifier.padding(top = timeGapSpacing + 60.dp, bottom = 60.dp),
+                                        // 「现在」节点上下间距
+                                        modifier = Modifier.padding(top = timeGapSpacing + 120.dp, bottom = 120.dp)
                                     )
                                 }
                                 is TimelineItem.Event -> {
@@ -697,7 +662,6 @@ fun TimelineScreen(
                                         }
                                     }
                                 }
-                            }
                             }
                         }
 
@@ -737,6 +701,7 @@ fun TimelineScreen(
 
 /**
  * 「现在」大节点 — 锚点居中，NOW 标签在 Canvas 中绘制于节点右侧。
+ * 时间文字作为背景层，发光节点浮动在其上方（Z 轴叠加）。
  */
 @Composable
 private fun TimelineNowNode(
@@ -745,10 +710,37 @@ private fun TimelineNowNode(
     contentRootOffset: Offset,
     modifier: Modifier = Modifier,
 ) {
+    var nowTimeText by remember { mutableStateOf(currentTimeText()) }
+
+    // 每秒刷新时间
+    LaunchedEffect(Unit) {
+        while (true) {
+            nowTimeText = currentTimeText()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
     Box(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
+        // 底层：时间 + 日期，高透明度若隐若现
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                nowTimeText.first,
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                ),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.04f),
+            )
+            Text(
+                nowTimeText.second,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.05f),
+            )
+        }
+        // 顶层：锚点（发光节点浮在文字上方）
         TimelineAnchor(index, anchorPositions, contentRootOffset)
     }
 }
@@ -766,15 +758,13 @@ private sealed class TimelineItem {
     ) : TimelineItem()
 }
 
-private fun eventEpochDay(targetDateMillis: Long): Long {
-    return Instant.ofEpochMilli(targetDateMillis)
-        .atZone(ZoneId.of("UTC"))
-        .toLocalDate()
-        .toEpochDay()
-}
+// 缓存的格式化器（DateTimeFormatter 线程安全，可复用）
+private val timeFormatter by lazy { DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault()) }
+private val dateFormatter by lazy { DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.LONG).withLocale(Locale.getDefault()) }
 
-private fun eventSideIndex(items: List<TimelineItem>, itemIndex: Int): Int {
-    return items.take(itemIndex).count { it is TimelineItem.Event }
+private fun currentTimeText(): Pair<String, String> {
+    val now = LocalDateTime.now()
+    return Pair(now.format(timeFormatter), now.format(dateFormatter))
 }
 
 private fun timelineGapSpacing(daysDiff: Float, maxDayGap: Float) = when {
@@ -823,11 +813,29 @@ private data class Star(
     val speed: Float,  // 闪烁速度倍数
 )
 
+private data class MeteorParticle(
+    val t: Float,       // 沿尾巴的位置 0..1
+    val offsetXDp: Float, // dp 单位随机偏移
+    val offsetYDp: Float, // dp 单位随机偏移
+)
+
 private data class MeteorEvent(
     val trigger: Float, // 0..1 在 meteorPhase 周期中的触发点
     val startX: Float,  // 0..1
     val startY: Float,  // 0..1
     val angle: Float,   // 弧度，飞行方向
+    val cosAngle: Float, // 预计算 cos(angle)
+    val sinAngle: Float, // 预计算 sin(angle)
     val length: Float,  // dp，尾巴长度
     val speed: Float,   // 相对速度
+    val particles: List<MeteorParticle>, // 预计算尾迹碎粒
+)
+
+private data class NebulaCloud(
+    val x: Float,           // 0..1 相对位置
+    val y: Float,           // 0..1 相对位置
+    val radius: Float,      // 相对 vpW
+    val peakAlpha: Float,   // 中心最大透明度
+    val color: Color,       // 基础色
+    val parallaxFactor: Float, // 视差系数
 )
