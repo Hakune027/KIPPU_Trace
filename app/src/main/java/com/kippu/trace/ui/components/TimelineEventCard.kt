@@ -48,10 +48,11 @@ fun TimelineEventCard(
     val context = LocalContext.current
     val relative = TimeUtils.getRelativeTime(event.targetDate)
     val timeDesc = TimeUtils.formatRelativeTime(context, relative)
-    val prefix = if (TimeUtils.isFuture(event.targetDate)) {
-        stringResource(R.string.label_until)
-    } else {
-        stringResource(R.string.label_since)
+    val isToday = relative.years == 0 && relative.months == 0 && relative.weeks == 0 && relative.days == 0
+    val prefix = when {
+        isToday -> ""
+        TimeUtils.isFuture(event.targetDate) -> stringResource(R.string.label_until)
+        else -> stringResource(R.string.label_since)
     }
     val hasBg = event.backgroundUri != null
     val isDark = isSystemInDarkTheme()
@@ -135,7 +136,7 @@ fun TimelineEventCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "$prefix $timeDesc",
+                    if (isToday) timeDesc else "$prefix $timeDesc",
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,

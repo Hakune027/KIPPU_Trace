@@ -31,6 +31,7 @@ import com.kippu.trace.utils.LanguageMode
 import com.kippu.trace.utils.LanguagePreferences
 import com.kippu.trace.utils.ThemeMode
 import com.kippu.trace.utils.ThemePreferences
+import com.kippu.trace.utils.NowNodeStyle
 import com.kippu.trace.utils.TimelineScaleMode
 import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.viewmodel.EventViewModel
@@ -55,9 +56,10 @@ fun SettingsScreen(
     val developingFeatureName = remember { mutableStateOf("") }
     val showThemeDialog = remember { mutableStateOf(false) }
     val showLanguageDialog = remember { mutableStateOf(false) }
-    val showTimelineScaleDialog = remember { mutableStateOf(false) }
+    val showTimelineDialog = remember { mutableStateOf(false) }
     val currentLanguageMode = remember { mutableStateOf(LanguagePreferences.getLanguageMode(context)) }
     val currentTimelineScaleMode = remember { mutableStateOf(TimelinePreferences.getScaleMode(context)) }
+    val currentNowNodeStyle = remember { mutableStateOf(TimelinePreferences.getNowStyle(context)) }
 
     // 备份弹窗状态
     val showBackupDialog = remember { mutableStateOf(false) }
@@ -375,62 +377,96 @@ fun SettingsScreen(
         )
     }
 
-    // 时间轴刻度样式弹窗
-    if (showTimelineScaleDialog.value) {
+    // 时间线设置弹窗（合并刻度样式 + 节点样式）
+    if (showTimelineDialog.value) {
         AlertDialog(
-            onDismissRequest = { showTimelineScaleDialog.value = false },
-            title = { Text(stringResource(R.string.timeline_scale_mode)) },
+            onDismissRequest = { showTimelineDialog.value = false },
+            title = { Text(stringResource(R.string.timeline_settings)) },
             text = {
                 Column {
+                    // 刻度样式
+                    Text(
+                        stringResource(R.string.timeline_scale_mode),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
                     TimelineScaleMode.entries.forEach { mode ->
                         val isSelected = mode == currentTimelineScaleMode.value
                         Surface(
                             onClick = {
                                 currentTimelineScaleMode.value = mode
                                 TimelinePreferences.setScaleMode(context, mode)
-                                showTimelineScaleDialog.value = false
                             },
-                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant
-                                    else Color.Transparent,
+                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = TimelinePreferences.scaleModeLabel(mode, context),
+                                    TimelinePreferences.scaleModeLabel(mode, context),
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
                                                 else MaterialTheme.colorScheme.onSurface
                                     )
                                 )
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
                             }
                         }
                         if (mode != TimelineScaleMode.entries.last()) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                            )
+                            HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                        }
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // 节点样式
+                    Text(
+                        stringResource(R.string.now_node_style),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                    )
+                    NowNodeStyle.entries.forEach { style ->
+                        val isSelected = style == currentNowNodeStyle.value
+                        Surface(
+                            onClick = {
+                                currentNowNodeStyle.value = style
+                                TimelinePreferences.setNowStyle(context, style)
+                            },
+                            color = if (isSelected) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    TimelinePreferences.nowStyleLabel(style, context),
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
+                                                else MaterialTheme.colorScheme.onSurface
+                                    )
+                                )
+                                if (isSelected) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        if (style != NowNodeStyle.entries.last()) {
+                            HorizontalDivider(Modifier.padding(horizontal = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                         }
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showTimelineScaleDialog.value = false }) {
+                TextButton(onClick = { showTimelineDialog.value = false }) {
                     Text(stringResource(R.string.close))
                 }
             }
@@ -480,11 +516,13 @@ fun SettingsScreen(
                         showLanguageDialog.value = true
                     }
                     SettingsItem(
-                        title = stringResource(R.string.timeline_scale_mode),
+                        title = stringResource(R.string.timeline_settings),
                         icon = Icons.Default.Timeline,
-                        subtitle = TimelinePreferences.scaleModeLabel(currentTimelineScaleMode.value, context)
+                        subtitle = context.getString(R.string.timeline_settings_subtitle,
+                            TimelinePreferences.scaleModeLabel(currentTimelineScaleMode.value, context),
+                            TimelinePreferences.nowStyleLabel(currentNowNodeStyle.value, context))
                     ) {
-                        showTimelineScaleDialog.value = true
+                        showTimelineDialog.value = true
                     }
                 }
             }

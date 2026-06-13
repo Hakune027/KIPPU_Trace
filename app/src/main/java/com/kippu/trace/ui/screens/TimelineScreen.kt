@@ -3,6 +3,7 @@ package com.kippu.trace.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import com.kippu.trace.ui.components.TimelineEventCard
 import com.kippu.trace.utils.DateFormatters
 import com.kippu.trace.utils.ThemeMode
 import com.kippu.trace.utils.ThemePreferences
+import com.kippu.trace.utils.NowNodeStyle
 import com.kippu.trace.utils.TimelinePreferences
 import com.kippu.trace.utils.TimelineScaleMode
 import java.time.LocalDateTime
@@ -83,6 +85,7 @@ fun TimelineScreen(
     onEventClick: (DateEvent) -> Unit,
 ) {
     val scaleMode = TimelinePreferences.getScaleMode(LocalContext.current)
+    val nowStyle = TimelinePreferences.getNowStyle(LocalContext.current)
     // ViewModel 已预计算所有数据，直接使用
     val timelineItems = remember(data) {
         data.items.map { info ->
@@ -109,6 +112,19 @@ fun TimelineScreen(
     var contentRootOffset by remember { mutableStateOf(Offset.Zero) }
 
     val bgColor = MaterialTheme.colorScheme.background
+    val starColor = Color.White
+
+    // 金色配色（浅色/深色共用）
+    val goldColor = Color(0xFFC8966C)
+    val goldLight = Color(0xFFE8C9A0)
+    val themeMode = ThemePreferences.getThemeMode(LocalContext.current)
+    val isDark = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    val goldCore = if (isDark) Color(0xFFFFF8E1) else Color(0xFFFFECB3)
+    val nowColor = goldColor
 
     val twoPi = 2f * PI.toFloat()
 
@@ -192,43 +208,109 @@ fun TimelineScreen(
             .fillMaxSize()
             .background(bgColor)
     ) {
-        if (sortedEvents.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        stringResource(R.string.timeline_subtitle),
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f),
-                            textAlign = TextAlign.Center,
-                        ),
-                        modifier = Modifier.padding(horizontal = 48.dp),
+        // ── 远景星空（固定层）── 无论有无事件都渲染
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val vpW = size.width; val vpH = size.height
+            if (isDark) {
+                stars.forEach { star ->
+                    var cy = star.y * vpH
+                    if (cy < 0f) cy += vpH
+                    val cx = star.x * vpW
+                    val twinkle = 0.5f + 0.5f * sin(starTwinkle * star.speed + star.phase)
+                    val a = (star.alpha * (0.25f + 0.75f * twinkle)).coerceIn(0f, 1f)
+                    val r = star.radius.dp.toPx() * (0.75f + 0.25f * twinkle)
+                    drawCircle(
+                        Brush.radialGradient(listOf(starColor.copy(alpha = a), Color.Transparent), center = Offset(cx, cy), radius = r * 1.8f),
+                        radius = r * 1.8f, center = Offset(cx, cy)
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.timeline_empty_hint),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.22f),
-                            textAlign = TextAlign.Center,
-                        ),
-                    )
+                    drawCircle(color = starColor.copy(alpha = a * 1.3f), radius = r, center = Offset(cx, cy))
                 }
             }
-        } else {
-            // 浅色模式：白金配色；深色模式：原主题黑白配色
-            val themeMode = ThemePreferences.getThemeMode(LocalContext.current)
-            val isDark = when (themeMode) {
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
+            meteors.forEach { m ->
+                val local = (meteorPhase - m.trigger + 1f) % 1f
+                val activeWindow = 0.55f
+                if (local >= activeWindow) return@forEach
+                val prog = (local / activeWindow).coerceIn(0f, 1f)
+                val alpha = (when {
+                    prog < 0.12f -> prog / 0.12f
+                    prog > 0.82f -> (1f - prog) / 0.18f
+                    else -> 1f
+                } * 0.85f).coerceIn(0f, 1f)
+                val dx = m.cosAngle * vpW * m.speed * prog
+                val dy = m.sinAngle * vpW * m.speed * prog
+                val hx = m.startX * vpW + dx
+                val hy = m.startY * vpH + dy
+                val tailLen = m.length.dp.toPx()
+                if (hx < -tailLen || hx > vpW + tailLen || hy < -tailLen || hy > vpH + tailLen) return@forEach
+                val headWidth = 1.8.dp.toPx()
+                val tdx = -m.cosAngle; val tdy = -m.sinAngle
+                val perpX = -tdy * headWidth; val perpY = tdx * headWidth
+                val tipX = hx + tdx * tailLen; val tipY = hy + tdy * tailLen
+                val midX = hx + tdx * tailLen * 0.4f; val midY = hy + tdy * tailLen * 0.4f
+                val midW = headWidth * 0.35f
+                val tailPath = Path().apply {
+                    moveTo(hx + perpX, hy + perpY)
+                    quadraticTo(midX + tdy * midW, midY - tdx * midW, tipX, tipY)
+                    lineTo(tipX, tipY)
+                    quadraticTo(midX - tdy * midW, midY + tdx * midW, hx - perpX, hy - perpY)
+                    close()
+                }
+                drawPath(tailPath, goldLight.copy(alpha = alpha * 0.30f))
+                drawPath(tailPath, goldColor.copy(alpha = alpha * 0.10f), style = Stroke(2.dp.toPx()))
+                drawCircle(Brush.radialGradient(listOf(goldLight.copy(alpha = alpha * 0.5f), Color.Transparent), center = Offset(hx, hy), radius = 8.dp.toPx()), radius = 8.dp.toPx(), center = Offset(hx, hy))
+                drawCircle(Brush.radialGradient(listOf(goldColor.copy(alpha = alpha * 0.7f), Color.Transparent), center = Offset(hx, hy), radius = 4.dp.toPx()), radius = 4.dp.toPx(), center = Offset(hx, hy))
+                drawCircle(color = goldColor.copy(alpha = alpha), radius = 1.5.dp.toPx(), center = Offset(hx, hy))
+                drawCircle(color = goldLight.copy(alpha = alpha * 0.8f), radius = 0.6.dp.toPx(), center = Offset(hx + 0.3.dp.toPx(), hy - 0.3.dp.toPx()))
+                m.particles.forEach { p ->
+                    val px = hx + tdx * tailLen * p.t + p.offsetXDp.dp.toPx()
+                    val py = hy + tdy * tailLen * p.t + p.offsetYDp.dp.toPx()
+                    drawCircle(color = goldLight.copy(alpha = alpha * 0.25f * (1f - p.t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
+                }
             }
-            val goldColor = Color(0xFFC8966C)
-            val goldLight = Color(0xFFE8C9A0)
-            val goldCore = if (isDark) Color(0xFFFFF8E1) else Color(0xFFFFECB3)
-val surfaceColor = MaterialTheme.colorScheme.surface
-            val nowColor = goldColor
+
+        }
+
+        if (sortedEvents.isEmpty()) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                var nowTimeText by remember { mutableStateOf(currentTimeText()) }
+                LaunchedEffect(Unit) {
+                    while (true) { nowTimeText = currentTimeText(); delay(1000) }
+                }
+                Text(
+                    nowTimeText.first,
+                    style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f),
+                )
+                Text(
+                    nowTimeText.second,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f),
+                )
+                Spacer(Modifier.height(24.dp))
+                Text(
+                    stringResource(R.string.timeline_subtitle),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f),
+                        textAlign = TextAlign.Center,
+                    ),
+                    modifier = Modifier.padding(horizontal = 48.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.timeline_empty_hint),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.22f),
+                        textAlign = TextAlign.Center,
+                    ),
+                )
+            }
+        } else {
             val nowLabel = stringResource(R.string.timeline_now)
             val accentColor = goldColor
-            val starColor = Color.White
             val scrollState = rememberScrollState()
             val contentAlpha = remember { Animatable(0f) }
             var hasInitialScrolled by rememberSaveable { mutableStateOf(false) }
@@ -248,86 +330,6 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                 }
                 contentAlpha.animateTo(1f, tween(300))
                 hasInitialScrolled = true
-            }
-
-            // ── 远景星空（固定层，随滚动做极慢视差）──
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val parallax = scrollState.value.toFloat() * 0.01f
-                val vpW = size.width
-                val vpH = size.height
-
-                stars.forEach { star ->
-                    var cy = (star.y * vpH - parallax) % vpH
-                    if (cy < 0f) cy += vpH
-                    val cx = star.x * vpW
-                    val twinkle = 0.5f + 0.5f * sin(starTwinkle * star.speed + star.phase)
-                    val a = (star.alpha * (0.25f + 0.75f * twinkle)).coerceIn(0f, 1f)
-                    val r = star.radius.dp.toPx() * (0.75f + 0.25f * twinkle)
-                    drawCircle(
-                        Brush.radialGradient(listOf(starColor.copy(alpha = a), Color.Transparent), center = Offset(cx, cy), radius = r * 1.8f),
-                        radius = r * 1.8f, center = Offset(cx, cy)
-                    )
-                    drawCircle(color = starColor.copy(alpha = a * 1.3f), radius = r, center = Offset(cx, cy))
-                }
-
-                // ── 流星：从屏外滑入，横跨后滑出 ──
-                meteors.forEach { m ->
-                    val local = (meteorPhase - m.trigger + 1f) % 1f
-                    // 全程可视窗口：足够跨越整个屏幕
-                    val activeWindow = 0.55f
-                    if (local >= activeWindow) return@forEach
-                    val prog = (local / activeWindow).coerceIn(0f, 1f)
-                    // alpha：屏外渐显→屏内全亮→屏外渐隐
-                    val alpha = when {
-                        prog < 0.12f -> (prog / 0.12f).coerceIn(0f, 1f)
-                        prog > 0.82f -> ((1f - prog) / 0.18f).coerceIn(0f, 1f)
-                        else -> 1f
-                    } * 0.85f
-                    val dx = m.cosAngle * vpW * m.speed * prog
-                    val dy = m.sinAngle * vpW * m.speed * prog
-                    val hx = m.startX * vpW + dx
-                    val hy = m.startY * vpH + dy - parallax * 0.5f
-                    val tailLen = m.length.dp.toPx()
-                    val tdx = -m.cosAngle
-                    val tdy = -m.sinAngle
-
-                    // 仅绘制屏幕可见部分（性能优化）
-                    if (hx < -tailLen || hx > vpW + tailLen || hy < -tailLen || hy > vpH + tailLen) return@forEach
-
-                    // 锥形尾巴路径
-                    val headWidth = 1.8.dp.toPx()
-                    val perpX = -tdy * headWidth
-                    val perpY = tdx * headWidth
-                    val tipX = hx + tdx * tailLen
-                    val tipY = hy + tdy * tailLen
-                    val midX = hx + tdx * tailLen * 0.4f
-                    val midY = hy + tdy * tailLen * 0.4f
-                    val midW = headWidth * 0.35f
-                    val tailPath = Path().apply {
-                        moveTo(hx + perpX, hy + perpY)
-                        quadraticTo(midX + tdy * midW, midY - tdx * midW, tipX, tipY)
-                        lineTo(tipX, tipY)
-                        quadraticTo(midX - tdy * midW, midY + tdx * midW, hx - perpX, hy - perpY)
-                        close()
-                    }
-                    drawPath(tailPath, goldLight.copy(alpha = alpha * 0.30f))
-                    drawPath(tailPath, goldColor.copy(alpha = alpha * 0.10f), style = Stroke(2.dp.toPx()))
-                    drawCircle(
-                        Brush.radialGradient(listOf(goldLight.copy(alpha = alpha * 0.5f), Color.Transparent), center = Offset(hx, hy), radius = 8.dp.toPx()),
-                        radius = 8.dp.toPx(), center = Offset(hx, hy)
-                    )
-                    drawCircle(
-                        Brush.radialGradient(listOf(goldColor.copy(alpha = alpha * 0.7f), Color.Transparent), center = Offset(hx, hy), radius = 4.dp.toPx()),
-                        radius = 4.dp.toPx(), center = Offset(hx, hy)
-                    )
-                    drawCircle(color = goldColor.copy(alpha = alpha), radius = 1.5.dp.toPx(), center = Offset(hx, hy))
-                    drawCircle(color = goldLight.copy(alpha = alpha * 0.8f), radius = 0.6.dp.toPx(), center = Offset(hx + 0.3.dp.toPx(), hy - 0.3.dp.toPx()))
-                    m.particles.forEach { p ->
-                        val px = hx + tdx * tailLen * p.t + p.offsetXDp.dp.toPx()
-                        val py = hy + tdy * tailLen * p.t + p.offsetYDp.dp.toPx()
-                        drawCircle(color = goldLight.copy(alpha = alpha * 0.25f * (1f - p.t)), radius = 0.3.dp.toPx(), center = Offset(px, py))
-                    }
-                }
             }
 
             Column(
@@ -390,20 +392,9 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                         // ── 单锚点 ──
                         if (allAnchors.size == 1) {
                             val a = allAnchors.first()
-                            val center = Offset(a.x, a.y)
-                            val isNow = a.isNow
-                            val r = if (isNow) nowNodeRadius else nodeRadius
-
-                            if (!isNow) {
+                            if (!a.isNow) {
                                 drawLine(accentColor.copy(alpha = 0.18f), Offset(a.x, 0f), Offset(a.x, size.height), strokeWidth = 1.dp.toPx())
-                                // 光点风格事件节点（单锚点）
-                                drawEventGlowNode(center, accentColor, starTwinkle, nowPulse)
-                            }
-                            if (isNow) {
-                                drawCircle(Brush.radialGradient(listOf(nowColor.copy(alpha = 0.10f * nowPulse), Color.Transparent), center = center, radius = 56.dp.toPx()), radius = 56.dp.toPx(), center = center)
-                                drawCircle(color = surfaceColor, radius = r, center = center)
-                                drawCircle(color = nowColor.copy(alpha = 0.30f), radius = r, center = center, style = Stroke(2.dp.toPx()))
-                                drawCircle(color = nowColor.copy(alpha = 0.40f), radius = 4.dp.toPx(), center = center)
+                                drawEventGlowNode(Offset(a.x, a.y), accentColor, starTwinkle, nowPulse)
                             }
                             return@Canvas
                         }
@@ -580,71 +571,6 @@ val surfaceColor = MaterialTheme.colorScheme.surface
                             drawEventGlowNode(Offset(a.x, a.y), accentColor, starTwinkle, nowPulse)
                         }
 
-                        // ──「现在」光点 ──
-                        nowAnchor?.let { a ->
-                            val center = Offset(a.x, a.y)
-
-                            // 外层柔和光晕（脉冲）
-                            val glowRadius = 40.dp.toPx() + (nowPulse - 0.85f) / 0.15f * 16.dp.toPx()
-                            drawCircle(
-                                Brush.radialGradient(
-                                    listOf(nowColor.copy(alpha = 0.12f * nowPulse), Color.Transparent),
-                                    center = center, radius = glowRadius
-                                ),
-                                radius = glowRadius, center = center
-                            )
-
-                            // 4 条旋转光射线（尖端以小圆点收尾）
-                            val rayLen = 24.dp.toPx()
-                            (0 until 4).forEach { i ->
-                                val angle = nowRotation + i.toFloat() * (PI.toFloat() * 0.5f)
-                                val ex = center.x + cos(angle) * rayLen
-                                val ey = center.y + sin(angle) * rayLen
-                                val rayMod = 0.5f + 0.5f * cos(starTwinkle * 2f + i.toFloat() * 1.57f)
-                                val rayAlpha = 0.20f * nowPulse * rayMod
-                                drawLine(
-                                    nowColor.copy(alpha = rayAlpha),
-                                    center, Offset(ex, ey),
-                                    strokeWidth = 1.5.dp.toPx()
-                                )
-                                // 射线尖端光点
-                                drawCircle(
-                                    nowColor.copy(alpha = rayAlpha * 1.5f),
-                                    radius = 1.2.dp.toPx(), center = Offset(ex, ey)
-                                )
-                            }
-
-                            // 光点核心 — 亮金多层发光点
-                            val coreR = 4.5.dp.toPx()
-                            drawCircle(
-                                Brush.radialGradient(
-                                    listOf(goldCore.copy(alpha = 0.9f), nowColor.copy(alpha = 0.6f), Color.Transparent),
-                                    center = center, radius = coreR * 2.5f
-                                ),
-                                radius = coreR * 2.5f, center = center
-                            )
-                            drawCircle(color = goldCore.copy(alpha = 0.95f), radius = coreR, center = center)
-                            drawCircle(color = Color.White.copy(alpha = 0.50f), radius = coreR * 0.5f, center = center)
-
-                            // 「NOW」标注
-                            val textPaint = android.graphics.Paint().apply {
-                                color = android.graphics.Color.argb(
-                                    (nowColor.alpha * 0.50f).toInt(),
-                                    (nowColor.red * 255).toInt(),
-                                    (nowColor.green * 255).toInt(),
-                                    (nowColor.blue * 255).toInt()
-                                )
-                                textSize = 10.sp.toPx()
-                                isAntiAlias = true
-                                typeface = android.graphics.Typeface.DEFAULT
-                            }
-                            drawContext.canvas.nativeCanvas.drawText(
-                                nowLabel,
-                                a.x + 20.dp.toPx(),
-                                a.y + 3.sp.toPx(),
-                                textPaint
-                            )
-                        }
                     }
 
                     // 层2: 卡片列表
@@ -712,6 +638,67 @@ val surfaceColor = MaterialTheme.colorScheme.surface
 
                         Spacer(Modifier.height(100.dp))
                     }
+                    }
+
+                    // 层3: now 节点覆盖层（始终在卡片上方）
+                    Canvas(modifier = Modifier.matchParentSize()) {
+                        anchorPositions[nowItemIndex]?.let { nowPos ->
+                            val center = Offset(nowPos.x, nowPos.y)
+                            val glowR = 40.dp.toPx() + (nowPulse - 0.85f) / 0.15f * 16.dp.toPx()
+                            drawCircle(
+                                Brush.radialGradient(listOf(nowColor.copy(alpha = 0.12f * nowPulse), Color.Transparent), center = center, radius = glowR),
+                                radius = glowR, center = center
+                            )
+                            when (nowStyle) {
+                                NowNodeStyle.RAYS -> {
+                                    val rayLen = 24.dp.toPx()
+                                    (0 until 4).forEach { i ->
+                                        val angle = nowRotation + i.toFloat() * (PI.toFloat() * 0.5f)
+                                        val ex = center.x + cos(angle) * rayLen
+                                        val ey = center.y + sin(angle) * rayLen
+                                        val rayMod = 0.5f + 0.5f * cos(starTwinkle * 2f + i.toFloat() * 1.57f)
+                                        val rayAlpha = 0.20f * nowPulse * rayMod
+                                        drawLine(nowColor.copy(alpha = rayAlpha), center, Offset(ex, ey), strokeWidth = 1.5.dp.toPx())
+                                        drawCircle(nowColor.copy(alpha = rayAlpha * 1.5f), radius = 1.2.dp.toPx(), center = Offset(ex, ey))
+                                    }
+                                }
+                                NowNodeStyle.DOTS -> {
+                                    val maxDist = 24.dp.toPx(); val minDist = 4.dp.toPx()
+                                    val fast = nowRotation * 2.0f
+                                    (0 until 4).forEach { i ->
+                                        val phase = i.toFloat() * (PI.toFloat() * 0.5f)
+                                        val dist = minDist + (maxDist - minDist) * (0.5f + 0.5f * sin(fast + phase))
+                                        val alpha = 0.25f + 0.15f * sin(fast + phase + PI.toFloat() * 0.5f)
+                                        drawCircle(nowColor.copy(alpha = alpha * nowPulse), radius = 2.0.dp.toPx(),
+                                            center = Offset(center.x + cos(phase) * dist, center.y + sin(phase) * dist))
+                                    }
+                                }
+                            }
+                            drawCircle(
+                                Brush.radialGradient(listOf(goldCore.copy(alpha = 0.8f), nowColor.copy(alpha = 0.4f), Color.Transparent), center = center, radius = 12.dp.toPx()),
+                                radius = 12.dp.toPx(), center = center
+                            )
+                            drawCircle(color = goldCore.copy(alpha = 0.9f), radius = 4.5.dp.toPx(), center = center)
+                            drawCircle(color = Color.White.copy(alpha = 0.5f), radius = 2.dp.toPx(), center = center)
+
+                            val textPaint = android.graphics.Paint().apply {
+                                color = android.graphics.Color.argb(
+                                    (nowColor.alpha * 0.50f).toInt(),
+                                    (nowColor.red * 255).toInt(),
+                                    (nowColor.green * 255).toInt(),
+                                    (nowColor.blue * 255).toInt()
+                                )
+                                textSize = 10.sp.toPx()
+                                isAntiAlias = true
+                                typeface = android.graphics.Typeface.DEFAULT
+                            }
+                            drawContext.canvas.nativeCanvas.drawText(
+                                nowLabel,
+                                nowPos.x + 20.dp.toPx(),
+                                nowPos.y + 3.sp.toPx(),
+                                textPaint
+                            )
+                        }
                     }
                 }
             }
