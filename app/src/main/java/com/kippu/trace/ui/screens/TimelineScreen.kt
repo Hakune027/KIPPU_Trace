@@ -517,24 +517,36 @@ fun TimelineScreen(
 
                         // ── 向 now 节点延伸的曲线段（单条贝塞尔曲线，自身渐隐）──
                         nowAnchor?.let { now ->
+                            // 构建 now 连接线的 Android native Path 用于模糊泛光
+                            val connGlowPaint = android.graphics.Paint().apply {
+                                isAntiAlias = true
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                            }
                             if (pastAnchors.isNotEmpty()) {
                                 val last = pastAnchors.last()
                                 val prev = pastAnchors.getOrElse(pastAnchors.lastIndex - 1) { last }
                                 val sx = last.x; val sy = last.y
                                 val ex = now.x; val ey = now.y - nowNodeRadius * 1.9f
                                 val dy = ey - sy
-                                // cp1: 沿样条退出方向平滑出发 (last - prev)
                                 val tx = last.x - prev.x
                                 val ty = (last.y - prev.y).coerceAtLeast(1f)
                                 val cp1 = Offset(sx + tx * 0.4f, sy + ty * 0.4f)
-                                // cp2: 平滑到达 now
                                 val cp2 = Offset(sx + (ex - sx) * 0.65f, sy + dy * 0.75f)
-                                val extPath = Path().apply {
-                                    moveTo(sx, sy)
-                                    cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
+                                val nativeExt = android.graphics.Path().apply {
+                                    moveTo(sx, sy); cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
                                 }
-                                drawPath(extPath, Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.10f), Color.Transparent), startY = sy, endY = ey), style = Stroke(5.dp.toPx()))
-                                drawPath(extPath, Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.38f), Color.Transparent), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
+                                val composeExt = Path().apply {
+                                    moveTo(sx, sy); cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
+                                }
+                                // 模糊泛光
+                                connGlowPaint.maskFilter = android.graphics.BlurMaskFilter(10.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                                connGlowPaint.strokeWidth = 3.dp.toPx()
+                                connGlowPaint.color = android.graphics.Color.argb((0.08f * 255).toInt(), (accentColor.red * 255).toInt(), (accentColor.green * 255).toInt(), (accentColor.blue * 255).toInt())
+                                drawContext.canvas.nativeCanvas.drawPath(nativeExt, connGlowPaint)
+                                // 主线
+                                drawPath(composeExt, Brush.verticalGradient(listOf(accentColor.copy(alpha = 0.38f), Color.Transparent), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
                             }
                             if (futureAnchors.isNotEmpty()) {
                                 val first = futureAnchors.first()
@@ -543,18 +555,23 @@ fun TimelineScreen(
                                 val ex = first.x; val ey = first.y
                                 val dy = ey - sy
                                 val dx = ex - sx
-                                // cp1: 从 now 平滑出发
                                 val cp1 = Offset(sx + dx * 0.35f, sy + dy * 0.25f)
-                                // cp2: 与样条入口切线对齐 (next - first)
                                 val tx = next.x - first.x
                                 val ty = (next.y - first.y).coerceAtLeast(1f)
                                 val cp2 = Offset(ex - tx * 0.4f, ey - ty * 0.4f)
-                                val extPath = Path().apply {
-                                    moveTo(sx, sy)
-                                    cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
+                                val nativeExt = android.graphics.Path().apply {
+                                    moveTo(sx, sy); cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
                                 }
-                                drawPath(extPath, Brush.verticalGradient(listOf(Color.Transparent, accentColor.copy(alpha = 0.10f)), startY = sy, endY = ey), style = Stroke(5.dp.toPx()))
-                                drawPath(extPath, Brush.verticalGradient(listOf(Color.Transparent, accentColor.copy(alpha = 0.38f)), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
+                                val composeExt = Path().apply {
+                                    moveTo(sx, sy); cubicTo(cp1.x, cp1.y, cp2.x, cp2.y, ex, ey)
+                                }
+                                // 模糊泛光
+                                connGlowPaint.maskFilter = android.graphics.BlurMaskFilter(10.dp.toPx(), android.graphics.BlurMaskFilter.Blur.NORMAL)
+                                connGlowPaint.strokeWidth = 3.dp.toPx()
+                                connGlowPaint.color = android.graphics.Color.argb((0.08f * 255).toInt(), (accentColor.red * 255).toInt(), (accentColor.green * 255).toInt(), (accentColor.blue * 255).toInt())
+                                drawContext.canvas.nativeCanvas.drawPath(nativeExt, connGlowPaint)
+                                // 主线
+                                drawPath(composeExt, Brush.verticalGradient(listOf(Color.Transparent, accentColor.copy(alpha = 0.38f)), startY = sy, endY = ey), style = Stroke(1.35.dp.toPx()))
                             }
                         }
 
