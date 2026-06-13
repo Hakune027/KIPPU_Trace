@@ -422,8 +422,8 @@ fun MainApp(
 
                 composable(
                     route = Screen.Timeline.route,
-                    enterTransition = { fadeIn(tween(400)) },
-                    exitTransition = { fadeOut(tween(400)) },
+                    enterTransition = { fadeIn(tween(500)) },
+                    exitTransition = { fadeOut(tween(500)) },
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
                         com.kippu.trace.ui.screens.TimelineScreen(
