@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kippu.trace.R
+import com.kippu.trace.ui.theme.AccentColor
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.ui.components.TimelineEventCard
 import java.time.Instant
@@ -130,16 +131,22 @@ fun TimelineScreen(
         label = "meteorPhase"
     )
 
+    val nowRotation by infiniteTransition.animateFloat(
+        initialValue = 0f, targetValue = 2f * PI.toFloat(),
+        animationSpec = infiniteRepeatable(tween(8000, easing = LinearEasing), RepeatMode.Restart),
+        label = "nowRotation"
+    )
+
     // 星空：固定种子的随机分布，避免重组时闪烁
     val stars = remember {
         val rng = java.util.Random(42)
         val all = mutableListOf<Star>()
         // 微星：大量细小暗淡
-        repeat(100) {
+        repeat(150) {
             all.add(Star(rng.nextFloat(), rng.nextFloat(), 0.25f + rng.nextFloat() * 0.45f, 0.08f + rng.nextFloat() * 0.12f, rng.nextFloat() * 6f, rng.nextFloat() * 3f))
         }
         // 亮星：中等，带光晕
-        repeat(25) {
+        repeat(35) {
             all.add(Star(rng.nextFloat(), rng.nextFloat(), 0.7f + rng.nextFloat() * 0.8f, 0.25f + rng.nextFloat() * 0.30f, rng.nextFloat() * 6f, rng.nextFloat() * 2f))
         }
         // 大星：少量，更亮，分布更均匀
@@ -152,7 +159,7 @@ fun TimelineScreen(
     // 流星：从屏幕外滑入，跨越屏幕后滑出
     val meteors = remember {
         val rng = java.util.Random(77)
-        (0 until 5).map { i ->
+        (0 until 7).map { i ->
             // 角度分布更广：~10°~80°，方向有变化
             val angle = PI.toFloat() * (0.05f + rng.nextFloat() * 0.40f)
             // 起点分散在不同位置
@@ -209,6 +216,27 @@ fun TimelineScreen(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val parallax = scrollState.value.toFloat() * 0.01f
                 val vpW = size.width; val vpH = size.height
+                                // ── 极淡银河/星云氛围 ──
+                val nebulaBrush = Brush.radialGradient(
+                    colors = listOf(
+                        AccentColor.copy(alpha = 0.012f),
+                        AccentColor.copy(alpha = 0.005f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(vpW * 0.5f, vpH * 0.35f),
+                    radius = vpW * 0.60f,
+                )
+                drawRect(nebulaBrush, size = Size(vpW, vpH))
+                val nebulaBrush2 = Brush.radialGradient(
+                    colors = listOf(
+                        nowColor.copy(alpha = 0.008f),
+                        Color.Transparent,
+                    ),
+                    center = Offset(vpW * 0.72f, vpH * 0.65f),
+                    radius = vpW * 0.45f,
+                )
+                drawRect(nebulaBrush2, size = Size(vpW, vpH))
+
                 stars.forEach { star ->
                     var cy = (star.y * vpH - parallax) % vpH
                     if (cy < 0f) cy += vpH
@@ -314,7 +342,7 @@ fun TimelineScreen(
 
                         val rodLen = 24.dp.toPx()
                         val nodeRadius = 8.dp.toPx()
-                        val nowNodeRadius = 22.dp.toPx()
+                        val nowNodeRadius = 30.dp.toPx()
 
                         val eventAnchors = allAnchors.filter { !it.isNow }
                         val nowAnchor = allAnchors.find { it.isNow }
@@ -330,7 +358,7 @@ fun TimelineScreen(
                                 drawLine(accentColor.copy(alpha = 0.28f), Offset(a.x, 0f), Offset(a.x, size.height), strokeWidth = 1.dp.toPx())
                             }
                             if (isNow) {
-                                drawCircle(Brush.radialGradient(listOf(nowColor.copy(alpha = 0.10f * nowPulse), Color.Transparent), center = center, radius = 42.dp.toPx()), radius = 42.dp.toPx(), center = center)
+                                drawCircle(Brush.radialGradient(listOf(nowColor.copy(alpha = 0.10f * nowPulse), Color.Transparent), center = center, radius = 56.dp.toPx()), radius = 56.dp.toPx(), center = center)
                             }
                             drawCircle(color = surfaceColor, radius = r, center = center)
                             drawCircle(color = if (isNow) nowColor.copy(alpha = 0.30f) else accentColor.copy(alpha = 0.30f), radius = r, center = center, style = Stroke(if (isNow) 2.dp.toPx() else 1.6.dp.toPx()))
@@ -380,10 +408,6 @@ fun TimelineScreen(
                                 path.cubicTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y)
                             }
 
-                            // 泛光层
-                            listOf(12.dp.toPx() to 0.025f, 6.dp.toPx() to 0.050f)
-                                .forEach { (sw, a) -> drawPath(path, accentColor.copy(alpha = a), style = Stroke(sw)) }
-                            drawPath(path, curveColor.copy(alpha = 0.22f), style = Stroke(3.0.dp.toPx()))
                             drawPath(path, accentColor.copy(alpha = 0.55f), style = Stroke(1.4.dp.toPx()))
 
                             // 向两端延伸的尾巴（沿曲线方向继续延伸并渐隐）
@@ -429,7 +453,7 @@ fun TimelineScreen(
                             if (pastAnchors.isNotEmpty()) {
                                 val last = pastAnchors.last()
                                 val sx = last.x; val sy = last.y
-                                val ex = now.x; val ey = now.y - nowNodeRadius
+                                val ex = now.x; val ey = now.y - nowNodeRadius * 1.9f
                                 val dy = ey - sy; val dx = ex - sx
                                 val cp1 = Offset(sx + dx * 0.12f, sy + dy * 0.40f)
                                 val cp2 = Offset(sx + dx * 0.65f, sy + dy * 0.75f)
@@ -441,7 +465,7 @@ fun TimelineScreen(
                             }
                             if (futureAnchors.isNotEmpty()) {
                                 val first = futureAnchors.first()
-                                val sx = now.x; val sy = now.y + nowNodeRadius
+                                val sx = now.x; val sy = now.y + nowNodeRadius * 1.6f
                                 val ex = first.x; val ey = first.y
                                 val dy = ey - sy; val dx = ex - sx
                                 val cp1 = Offset(sx + dx * 0.35f, sy + dy * 0.25f)
@@ -460,43 +484,152 @@ fun TimelineScreen(
                             val startX = if (isLeft) a.x - rodLen else a.x + nodeRadius
                             val endX = if (isLeft) a.x - nodeRadius else a.x + rodLen
                             drawLine(accentColor.copy(alpha = 0.28f), Offset(startX, a.y), Offset(endX, a.y), strokeWidth = 1.dp.toPx())
+                            // 连接杆端点装饰点
+                            drawCircle(color = accentColor.copy(alpha = 0.35f), radius = 1.dp.toPx(), center = Offset(startX, a.y))
+                            drawCircle(color = accentColor.copy(alpha = 0.35f), radius = 1.dp.toPx(), center = Offset(endX, a.y))
                         }
 
                         // ── 事件锚点节点 ──
                         eventAnchors.forEach { a ->
                             val center = Offset(a.x, a.y)
-                            drawCircle(color = surfaceColor, radius = nodeRadius, center = center)
+                            // 节点填充 — 径向渐变
+                            drawCircle(
+                                Brush.radialGradient(listOf(surfaceColor, surfaceColor.copy(alpha = 0.65f)), center = center, radius = nodeRadius),
+                                radius = nodeRadius, center = center
+                            )
                             drawCircle(color = accentColor.copy(alpha = 0.30f), radius = nodeRadius, center = center, style = Stroke(1.6.dp.toPx()))
-                            drawCircle(color = accentColor.copy(alpha = 0.45f), radius = 3.5.dp.toPx(), center = center)
+                            drawCircle(color = accentColor.copy(alpha = 0.55f), radius = 3.5.dp.toPx(), center = center)
                         }
 
-                        // ── 「现在」大节点 ──
+                                                // ──「现在」光点 ──
+
                         nowAnchor?.let { a ->
+
                             val center = Offset(a.x, a.y)
-                            drawCircle(Brush.radialGradient(listOf(nowColor.copy(alpha = 0.10f * nowPulse), Color.Transparent), center = center, radius = 42.dp.toPx()), radius = 42.dp.toPx(), center = center)
-                            drawCircle(color = surfaceColor, radius = nowNodeRadius, center = center)
-                            drawCircle(color = nowColor.copy(alpha = 0.30f), radius = nowNodeRadius, center = center, style = Stroke(2.dp.toPx()))
-                            drawCircle(color = nowColor.copy(alpha = 0.40f), radius = 4.dp.toPx(), center = center)
+
+
+
+                            // 外层柔和光晕（脉冲）
+
+                            val glowRadius = 40.dp.toPx() + (nowPulse - 0.85f) / 0.15f * 16.dp.toPx()
+
+                            drawCircle(
+
+                                Brush.radialGradient(
+
+                                    listOf(nowColor.copy(alpha = 0.12f * nowPulse), Color.Transparent),
+
+                                    center = center, radius = glowRadius
+
+                                ),
+
+                                radius = glowRadius, center = center
+
+                            )
+
+
+
+                            // 4 条旋转光射线（尖端以小圆点收尾）
+
+                            val rayLen = 24.dp.toPx()
+
+                            (0 until 4).forEach { i ->
+
+                                val angle = nowRotation + i.toFloat() * (PI.toFloat() * 0.5f)
+
+                                val ex = center.x + cos(angle) * rayLen
+
+                                val ey = center.y + sin(angle) * rayLen
+
+                                val rayMod = 0.5f + 0.5f * cos(starTwinkle * 2f + i.toFloat() * 1.57f)
+
+                                val rayAlpha = 0.20f * nowPulse * rayMod
+
+                                drawLine(
+
+                                    nowColor.copy(alpha = rayAlpha),
+
+                                    center, Offset(ex, ey),
+
+                                    strokeWidth = 1.5.dp.toPx()
+
+                                )
+
+                                // 射线尖端光点
+
+                                drawCircle(
+
+                                    nowColor.copy(alpha = rayAlpha * 1.5f),
+
+                                    radius = 1.2.dp.toPx(), center = Offset(ex, ey)
+
+                                )
+
+                            }
+
+
+
+                            // 光点核心 — 多层发光点
+
+                            val coreR = 4.5.dp.toPx()
+
+                            drawCircle(
+
+                                Brush.radialGradient(
+
+                                    listOf(Color.White.copy(alpha = 0.9f), nowColor.copy(alpha = 0.6f), Color.Transparent),
+
+                                    center = center, radius = coreR * 2.5f
+
+                                ),
+
+                                radius = coreR * 2.5f, center = center
+
+                            )
+
+                            drawCircle(color = Color.White.copy(alpha = 0.95f), radius = coreR, center = center)
+
+                            drawCircle(color = Color.White.copy(alpha = 0.50f), radius = coreR * 0.5f, center = center)
+
+
+
+                            // 「NOW」标注 — 更轻量的文字
 
                             val textPaint = android.graphics.Paint().apply {
+
                                 color = android.graphics.Color.argb(
-                                    (nowColor.alpha * 0.70f).toInt(),
+
+                                    (nowColor.alpha * 0.50f).toInt(),
+
                                     (nowColor.red * 255).toInt(),
+
                                     (nowColor.green * 255).toInt(),
+
                                     (nowColor.blue * 255).toInt()
+
                                 )
-                                textSize = 12.sp.toPx()
+
+                                textSize = 10.sp.toPx()
+
                                 isAntiAlias = true
-                                typeface = android.graphics.Typeface.DEFAULT_BOLD
+
+                                typeface = android.graphics.Typeface.DEFAULT
+
                             }
+
                             drawContext.canvas.nativeCanvas.drawText(
+
                                 nowLabel,
-                                a.x + nowNodeRadius + 12.dp.toPx(),
-                                a.y + 4.sp.toPx(),
+
+                                a.x + 20.dp.toPx(),
+
+                                a.y + 3.sp.toPx(),
+
                                 textPaint
+
                             )
-                        }
-                    }
+
+                        }                    }
 
                     // 层2: 卡片列表
                     Column(
@@ -519,7 +652,7 @@ fun TimelineScreen(
                             // 卡片入场动画
                             val entryAnim = remember { Animatable(0f) }
                             LaunchedEffect(Unit) {
-                                delay((index * 50L).coerceAtMost(800L))
+                                delay((index * 70L).coerceAtMost(800L))
                                 entryAnim.animateTo(1f, spring(
                                     dampingRatio = Spring.DampingRatioLowBouncy,
                                     stiffness = Spring.StiffnessMediumLow
@@ -538,7 +671,7 @@ fun TimelineScreen(
                                         index = index,
                                         anchorPositions = anchorPositions,
                                         contentRootOffset = contentRootOffset,
-                                        modifier = Modifier.padding(top = timeGapSpacing + 40.dp, bottom = 40.dp),
+                                        modifier = Modifier.padding(top = timeGapSpacing + 60.dp, bottom = 60.dp),
                                     )
                                 }
                                 is TimelineItem.Event -> {
@@ -578,7 +711,7 @@ fun TimelineScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(30.dp)
+                .height(40.dp)
                 .align(Alignment.TopCenter)
                 .background(
                     Brush.verticalGradient(
@@ -591,7 +724,7 @@ fun TimelineScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(56.dp)
                 .align(Alignment.BottomCenter)
                 .background(
                     Brush.verticalGradient(
@@ -648,7 +781,7 @@ private fun timelineGapSpacing(daysDiff: Float, maxDayGap: Float) = when {
     daysDiff <= 0f -> 18.dp
     else -> {
         val minSpacing = 32.dp
-        val maxSpacing = 640.dp
+        val maxSpacing = 560.dp
         val ratio = (daysDiff / maxDayGap.coerceAtLeast(1f)).coerceIn(0f, 1f)
         minSpacing + (maxSpacing - minSpacing) * ratio
     }

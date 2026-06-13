@@ -5,10 +5,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,14 +32,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
+import com.kippu.trace.ui.theme.AccentColor
 import com.kippu.trace.utils.TimeUtils
 
-/**
- * 时间轴事件卡片
- *
- * 统一基础尺寸（最小高度 80dp），高度根据标题文字量动态伸缩。
- * 标题最多 3 行，超出省略。
- */
 @Composable
 fun TimelineEventCard(
     event: DateEvent,
@@ -67,13 +64,11 @@ fun TimelineEventCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        // 统一尺寸容器：确保有背景/无背景卡片高度一致
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 80.dp),
         ) {
-            // 背景图层 — 先声明，在文字下面（Z-order: first = bottom）
             if (hasBg) {
                 AsyncImage(
                     model = event.backgroundUri,
@@ -83,14 +78,7 @@ fun TimelineEventCard(
                         .clip(cardShape),
                     contentScale = ContentScale.Crop,
                 )
-                // 轻量全局遮罩
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clip(cardShape)
-                        .background(Color.Black.copy(alpha = 0.10f)),
-                )
-                // 底部渐变遮罩
+                // 三段式渐变遮罩
                 Box(
                     Modifier
                         .matchParentSize()
@@ -98,13 +86,11 @@ fun TimelineEventCard(
                         .background(
                             Brush.verticalGradient(
                                 colors = listOf(
+                                    Color.Black.copy(alpha = 0.08f),
                                     Color.Transparent,
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.15f),
-                                    Color.Black.copy(alpha = 0.45f),
+                                    Color.Black.copy(alpha = 0.20f),
+                                    Color.Black.copy(alpha = 0.50f),
                                 ),
-                                startY = 0f,
-                                endY = Float.POSITIVE_INFINITY,
                             ),
                         ),
                 )
@@ -113,17 +99,34 @@ fun TimelineEventCard(
                     Modifier
                         .matchParentSize()
                         .clip(cardShape)
-                        .border(0.5.dp, Color.White.copy(alpha = 0.18f), cardShape),
+                        .border(0.5.dp, AccentColor.copy(alpha = 0.25f), cardShape),
+                )
+            } else {
+                // 无背景图卡片：极细边框
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clip(cardShape)
+                        .border(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.20f), cardShape),
                 )
             }
 
-            // 文字内容 — 后声明，在背景上面（Z-order: last = top），由文字量决定卡片高度
+            // 左侧点缀色条
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(3.dp)
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .clip(RoundedCornerShape(topStart = 2.dp, bottomStart = 2.dp))
+                    .background(AccentColor.copy(alpha = if (hasBg) 0.70f else 0.45f)),
+            )
+
+            // 文字内容
             Column(
                 modifier = Modifier
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
-                    .heightIn(min = 56.dp), // 内容区最小高度，配合卡片最小 80dp
+                    .padding(start = 22.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)
+                    .heightIn(min = 56.dp),
             ) {
-                // 标题：支持多行，根据文字量动态撑开卡片
                 Text(
                     event.title,
                     style = MaterialTheme.typography.bodyLarge.copy(
@@ -139,20 +142,31 @@ fun TimelineEventCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.height(4.dp))
-                // 时间描述
-                Text(
-                    "$prefix $timeDesc",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        color = if (hasBg) Color.White.copy(alpha = 0.75f)
-                                else MaterialTheme.colorScheme.secondary,
-                        fontSize = 12.sp,
-                        shadow = if (hasBg) Shadow(
-                            color = Color.Black.copy(alpha = 0.35f),
-                            blurRadius = 4f,
-                        ) else Shadow.None,
-                    ),
-                )
+                Spacer(Modifier.height(6.dp))
+                // 时间描述 — 徽章样式
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(
+                            if (hasBg) Color.White.copy(alpha = 0.12f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        "$prefix $timeDesc",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            color = if (hasBg) Color.White.copy(alpha = 0.75f)
+                                    else MaterialTheme.colorScheme.secondary,
+                            fontSize = 11.sp,
+                            shadow = if (hasBg) Shadow(
+                                color = Color.Black.copy(alpha = 0.35f),
+                                blurRadius = 4f,
+                            ) else Shadow.None,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                    )
+                }
             }
         }
     }
