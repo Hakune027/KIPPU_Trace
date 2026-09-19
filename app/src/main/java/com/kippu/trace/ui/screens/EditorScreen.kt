@@ -46,12 +46,15 @@ import coil.compose.AsyncImage
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
+import com.kippu.trace.ui.components.AnniversarySettings
+import com.kippu.trace.ui.components.AnniversarySettingsState
 import com.kippu.trace.ui.components.PinnedEventCard
 import com.kippu.trace.ui.theme.KIPPU_TraceTheme
 import com.kippu.trace.utils.FileUtils
 import com.kippu.trace.utils.TextUtils
 import com.kippu.trace.utils.TimeUtils
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -66,14 +69,15 @@ fun EditorScreen(
     // 使用新版 TextFieldState
     val titleState = rememberTextFieldState("")
     
-    var selectedDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var selectedDate by remember { mutableLongStateOf(com.kippu.trace.utils.AnniversaryUtils.millis(LocalDate.now())) }
     var backgroundUri by remember { mutableStateOf<String?>(null) }
     var isPinned by remember { mutableStateOf(false) }
     var maskOpacity by remember { mutableFloatStateOf(0.4f) }
     val showDatePicker = remember { mutableStateOf(false) }
-    var mode by remember { mutableStateOf(DisplayMode.COUNT_DOWN) }
     var dayChangeMinutes by remember { mutableIntStateOf(0) }
     val showDayChangeDialog = remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf(DisplayMode.ACCUMULATE) }
+    var cycleSettings by remember { mutableStateOf(AnniversarySettingsState()) }
 
     val scrollState = rememberScrollState()
 
@@ -89,7 +93,7 @@ fun EditorScreen(
     }
 
     val targetLocalDate = remember(selectedDate) {
-        Instant.ofEpochMilli(selectedDate).atZone(ZoneId.systemDefault()).toLocalDate()
+        Instant.ofEpochMilli(selectedDate).atZone(ZoneId.of("UTC")).toLocalDate()
     }
     
     val days = remember(targetLocalDate, dayChangeMinutes) {
@@ -97,12 +101,21 @@ fun EditorScreen(
         TimeUtils.getDayCount(today, targetLocalDate)
     }
 
+    // 全屏预览与详情页共用纪念日文案规则
+    val previewAnniversaryText = if (mode == DisplayMode.ACCUMULATE) {
+        TimeUtils.formatAnniversary(
+            context,
+            cycleSettings.applyTo(DateEvent(
+                title = "",
+                targetDate = selectedDate,
+                isFuture = false,
+                mode = mode
+            ))
+        )
+    } else null
+
     val formattedDate = remember(targetLocalDate) {
         targetLocalDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-    }
-    
-    LaunchedEffect(selectedDate) {
-        mode = if (selectedDate > System.currentTimeMillis()) DisplayMode.COUNT_DOWN else DisplayMode.ACCUMULATE
     }
 
     val untitledText = stringResource(R.string.untitled)
@@ -123,7 +136,7 @@ fun EditorScreen(
                     // 手机上默认 320dp，在大屏（如 Pad）下最高可扩展至 480dp
                     .widthIn(min = 320.dp, max = 480.dp)
                     .fillMaxWidth(0.85f)
-                    .wrapContentHeight()
+                    .heightIn(max = 720.dp).verticalScroll(rememberScrollState())
             ) {
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val scope = this
@@ -206,8 +219,8 @@ fun EditorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = {
-                        onSave(DateEvent(
+                    IconButton(enabled = cycleSettings.valid(mode), onClick = {
+                        onSave(cycleSettings.applyTo(DateEvent(
                             title = titleState.text.toString().ifEmpty { untitledText },
                             targetDate = selectedDate,
                             isFuture = mode == DisplayMode.COUNT_DOWN,
@@ -216,7 +229,7 @@ fun EditorScreen(
                             backgroundUri = backgroundUri,
                             maskOpacity = maskOpacity,
                             dayChangeMinutes = dayChangeMinutes
-                        ))
+                        )))
                     }) {
                         Icon(painter = rememberVectorPainter(Icons.Default.Check), contentDescription = "Save", tint = MaterialTheme.colorScheme.primary)
                     }
@@ -229,6 +242,8 @@ fun EditorScreen(
                 .padding(innerPadding)
                 .fillMaxSize()
                 .verticalScroll(scrollState)
+                // 放在滚动层内，为键盘上方提供可滚动空间；定位仍交给系统焦点处理。
+                .imePadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -353,7 +368,7 @@ fun EditorScreen(
                 )
             }   
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -362,6 +377,10 @@ fun EditorScreen(
                     Text(stringResource(R.string.pin_to_top), style = MaterialTheme.typography.titleSmall)
                     Switch(checked = isPinned, onCheckedChange = { isPinned = it })
                 }
+
+                AnniversarySettings(cycleSettings, mode)
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -390,7 +409,7 @@ fun EditorScreen(
                     ) {
                         Box {
                             PinnedEventCard(
-                                event = DateEvent(
+                                event = cycleSettings.applyTo(DateEvent(
                                     title = titleState.text.toString().ifEmpty { sampleTitleText },
                                     targetDate = selectedDate,
                                     isFuture = mode == DisplayMode.COUNT_DOWN,
@@ -399,7 +418,7 @@ fun EditorScreen(
                                     backgroundUri = backgroundUri,
                                     maskOpacity = maskOpacity,
                                     dayChangeMinutes = dayChangeMinutes
-                                ),
+                                )),
                                 onClick = {}
                             )
                         }
@@ -421,7 +440,8 @@ fun EditorScreen(
                             imageUri = backgroundUri,
                             opacity = maskOpacity,
                             isFuture = mode == DisplayMode.COUNT_DOWN,
-                            date = formattedDate
+                            date = formattedDate,
+                            anniversaryText = previewAnniversaryText
                         )
                     }
                 }
@@ -523,7 +543,7 @@ fun ModeOption(
 }
 
 @Composable
-fun FullScreenPreviewContent(title: String, days: String, imageUri: String?, opacity: Float, isFuture: Boolean, date: String) {
+fun FullScreenPreviewContent(title: String, days: String, imageUri: String?, opacity: Float, isFuture: Boolean, date: String, anniversaryText: String? = null) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (imageUri != null) {
             AsyncImage(
@@ -578,6 +598,7 @@ fun FullScreenPreviewContent(title: String, days: String, imageUri: String?, opa
             
             // 天数字号自适应
             val fontSize = when {
+                days.any { !it.isDigit() } -> 28.sp
                 days.length >= 8 -> 60.sp
                 days.length >= 7 -> 72.sp
                 days.length >= 6 -> 88.sp
@@ -586,6 +607,8 @@ fun FullScreenPreviewContent(title: String, days: String, imageUri: String?, opa
             }
 
             Text(
+                modifier = Modifier.padding(horizontal = 24.dp),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 text = days,
                 color = Color.White,
                 style = MaterialTheme.typography.displayLarge.copy(
@@ -597,11 +620,25 @@ fun FullScreenPreviewContent(title: String, days: String, imageUri: String?, opa
             val datePrefix = if (isFuture) stringResource(R.string.label_from) else stringResource(R.string.label_since_date)
             Text(
                 text = "$datePrefix $date",
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
                 color = Color.White.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     letterSpacing = 2.sp
                 )
             )
+            anniversaryText?.let {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = it,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        letterSpacing = 2.sp,
+                    ),
+                )
+            }
         }
     }
 }

@@ -2,6 +2,9 @@ package com.kippu.trace.utils
 
 import android.content.Context
 import com.kippu.trace.R
+import com.kippu.trace.model.AnniversaryType
+import com.kippu.trace.model.DateEvent
+import com.kippu.trace.model.DisplayMode
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -23,6 +26,23 @@ data class DetailedTimeResult(
     val hours: Long = 0,
     val minutes: Long = 0,
     val seconds: Long = 0
+)
+
+data class CalendarAnniversaryResult(
+    val years: Int = 0,
+    val months: Int = 0,
+    val weeks: Int = 0
+)
+
+data class AnniversaryCounterText(
+    val prefix: String,
+    val value: String,
+    val suffix: String,
+)
+
+data class AnniversaryTextResult(
+    val text: String,
+    val counters: List<AnniversaryCounterText> = emptyList(),
 )
 
 object TimeUtils {
@@ -71,13 +91,14 @@ object TimeUtils {
         nowMillis: Long = System.currentTimeMillis(),
         rolloverMinutes: Int = 0,
     ): RelativeTimeResult {
-        val systemZone = ZoneId.systemDefault()
-        
-        // 本地日期
+        val today = getEffectiveToday(nowMillis, rolloverMinutes)
+        return getRelativeTime(targetDateMillis, today)
+    }
+
+    fun getRelativeTime(targetDateMillis: Long, today: LocalDate): RelativeTimeResult {
         val targetDate = Instant.ofEpochMilli(targetDateMillis)
             .atZone(ZoneId.of("UTC"))
             .toLocalDate()
-        val today = getEffectiveToday(nowMillis, rolloverMinutes, systemZone)
         
         val start = if (today.isBefore(targetDate)) today else targetDate
         val end = if (today.isBefore(targetDate)) targetDate else today
@@ -140,4 +161,89 @@ object TimeUtils {
         val safe = minutes.coerceIn(0, 1439)
         return String.format(Locale.getDefault(), "%02d:%02d", safe / 60, safe % 60)
     }
+
+    // ===== 累计模式的纪念日 =====
+
+    // 自定义：累计天数达到 N 的倍数时，返回「几个 N 天」
+    fun getCustomMilestoneCount(targetDateMillis: Long, customDays: Int): Long {
+        return AnniversaryUtils.customCount(targetDateMillis, customDays)
+    }
+
+    // 预设：按日历日期匹配（不是数天数），返回年/月/周
+    fun getCalendarAnniversary(targetDateMillis: Long): CalendarAnniversaryResult {
+        return AnniversaryUtils.calendar(targetDateMillis)
+    }
+
+    // 累计模式下的纪念日显示文字；返回 null 表示用普通天数
+    fun getAnniversaryText(
+        context: Context,
+        event: DateEvent,
+        today: LocalDate = getEffectiveToday(rolloverMinutes = event.dayChangeMinutes),
+    ): AnniversaryTextResult? {
+        if (event.mode != DisplayMode.ACCUMULATE) return null
+        return when (event.anniversaryType) {
+            AnniversaryType.CUSTOM_DAYS -> {
+                val count = AnniversaryUtils.customCount(event.targetDate, event.customDays, today)
+                if (count <= 0) {
+                    null
+                } else {
+                    event.anniversaryMessage.takeIf { it.isNotBlank() }?.let(::AnniversaryTextResult)
+                        ?: run {
+                            val prefix = context.getString(R.string.anniversary_custom_prefix, event.customDays)
+                            val countText = count.toString()
+                            val suffix = context.getString(R.string.anniversary_custom_suffix, event.customDays)
+                            AnniversaryTextResult(
+                                text = prefix + countText + suffix,
+                                counters = listOf(AnniversaryCounterText(prefix, countText, suffix)),
+                            )
+                        }
+                }
+            }
+            AnniversaryType.CALENDAR -> {
+                val result = AnniversaryUtils.calendar(event.targetDate, today)
+                val counters = buildList {
+                    if (event.showYear && result.years > 0) {
+                        add(AnniversaryCounterText(
+                            context.getString(R.string.anniversary_counter_year_prefix),
+                            result.years.toString(),
+                            context.getString(R.string.anniversary_counter_year_suffix),
+                        ))
+                    }
+                    if (event.showMonth && result.months > 0) {
+                        add(AnniversaryCounterText(
+                            context.getString(R.string.anniversary_counter_month_prefix),
+                            result.months.toString(),
+                            context.getString(R.string.anniversary_counter_month_suffix),
+                        ))
+                    }
+                    if (event.showWeek && result.weeks > 0) {
+                        add(AnniversaryCounterText(
+                            context.getString(R.string.anniversary_counter_week_prefix),
+                            result.weeks.toString(),
+                            context.getString(R.string.anniversary_counter_week_suffix),
+                        ))
+                    }
+                }
+                if (counters.isEmpty()) {
+                    null
+                } else {
+                    event.anniversaryMessage.takeIf { it.isNotBlank() }
+                        ?.let(::AnniversaryTextResult)
+                        ?: AnniversaryTextResult(
+                            text = counters.joinToString(context.getString(R.string.time_separator)) {
+                                it.prefix + it.value + it.suffix
+                            },
+                            counters = counters,
+                        )
+                }
+            }
+            AnniversaryType.NONE -> null
+        }
+    }
+
+    fun formatAnniversary(
+        context: Context,
+        event: DateEvent,
+        today: LocalDate = getEffectiveToday(rolloverMinutes = event.dayChangeMinutes),
+    ): String? = getAnniversaryText(context, event, today)?.text
 }

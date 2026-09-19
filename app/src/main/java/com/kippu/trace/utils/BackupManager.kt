@@ -2,6 +2,7 @@ package com.kippu.trace.utils
 
 import android.content.Context
 import android.net.Uri
+import com.kippu.trace.model.AnniversaryType
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
 import org.json.JSONArray
@@ -125,6 +126,16 @@ object BackupManager {
             put("isPinned", isPinned)
             put("maskOpacity", maskOpacity.toDouble())
             put("dayChangeMinutes", dayChangeMinutes)
+            put("anniversaryType", anniversaryType.name)
+            put("customDays", customDays)
+            put("showYear", showYear)
+            put("showMonth", showMonth)
+            put("showWeek", showWeek)
+            put("anniversaryMessage", anniversaryMessage)
+            put("repeatMode", repeatMode.name)
+            put("repeatInterval", repeatInterval)
+            put("repeatCustomDays", repeatCustomDays)
+            put("repeatAnchorDate", repeatAnchorDate ?: JSONObject.NULL)
         }
     }
 
@@ -142,6 +153,20 @@ object BackupManager {
             isPinned = optBoolean("isPinned", false),
             maskOpacity = optDouble("maskOpacity", 0.3).toFloat(),
             dayChangeMinutes = optInt("dayChangeMinutes", 0),
+            anniversaryType = optString("anniversaryType", AnniversaryType.NONE.name).let {
+                runCatching { AnniversaryType.valueOf(it) }.getOrDefault(AnniversaryType.NONE)
+            },
+            customDays = optInt("customDays", 100),
+            showYear = optBoolean("showYear", true),
+            showMonth = optBoolean("showMonth", true),
+            showWeek = optBoolean("showWeek", true),
+            anniversaryMessage = optString("anniversaryMessage", ""),
+            repeatMode = runCatching {
+                com.kippu.trace.model.RepeatMode.valueOf(optString("repeatMode", "NONE"))
+            }.getOrDefault(com.kippu.trace.model.RepeatMode.NONE),
+            repeatInterval = optInt("repeatInterval", 1).coerceAtLeast(1),
+            repeatCustomDays = optInt("repeatCustomDays", 100).coerceAtLeast(1),
+            repeatAnchorDate = if (isNull("repeatAnchorDate")) null else optLong("repeatAnchorDate"),
         )
     }
 }

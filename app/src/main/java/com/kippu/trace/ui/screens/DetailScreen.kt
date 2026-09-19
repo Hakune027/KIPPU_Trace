@@ -13,6 +13,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.kippu.trace.ui.components.AnniversarySettings
+import com.kippu.trace.ui.components.AnniversarySettingsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -84,6 +88,7 @@ fun DetailScreen(
     
     // 日期选择
     var showDatePicker by remember { mutableStateOf(false) }
+    var showCycleSettings by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
 
     // 标题编辑
@@ -332,6 +337,21 @@ fun DetailScreen(
                                 color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                             )
                             DetailActionItem(
+                                icon = Icons.Default.Edit,
+                                title = stringResource(R.string.cycle_settings),
+                                subtitle = stringResource(R.string.cycle_settings_subtitle),
+                                shape = RectangleShape,
+                                onClick = {
+                                    showBottomSheet = false
+                                    showCycleSettings = true
+                                }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 24.dp),
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                            )
+                            DetailActionItem(
                                 icon = Icons.Default.CalendarMonth,
                                 title = stringResource(R.string.adjust_date),
                                 subtitle = stringResource(R.string.adjust_date_subtitle),
@@ -385,8 +405,65 @@ fun DetailScreen(
             )
         }
 
+        if (showCycleSettings) {
+            val editingEvent = events[pagerState.currentPage % events.size]
+            val cycleSettings = remember(editingEvent.id, showCycleSettings) {
+                AnniversarySettingsState(editingEvent)
+            }
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { showCycleSettings = false },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier
+                        .widthIn(min = 320.dp, max = 480.dp)
+                        .fillMaxWidth(0.85f)
+                        .heightIn(max = 720.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(vertical = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.cycle_settings),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                        AnniversarySettings(
+                            state = cycleSettings,
+                            mode = editingEvent.mode,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(onClick = { showCycleSettings = false }) {
+                                Text(stringResource(R.string.cancel))
+                            }
+                            TextButton(
+                                enabled = cycleSettings.valid(editingEvent.mode),
+                                onClick = {
+                                    onUpdateEvent(cycleSettings.applyTo(editingEvent))
+                                    showCycleSettings = false
+                                },
+                            ) {
+                                Text(stringResource(R.string.confirm))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 小一些的日期选择器
         if (showDatePicker) {
+            val editingEvent = events[pagerState.currentPage % events.size]
+            LaunchedEffect(editingEvent.id) { datePickerState.selectedDateMillis = editingEvent.targetDate }
             androidx.compose.ui.window.Dialog(
                 onDismissRequest = { showDatePicker = false },
                 properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
@@ -399,7 +476,7 @@ fun DetailScreen(
                         // 手机上默认 320dp，在大屏（如 Pad）下最高可扩展至 480dp
                         .widthIn(min = 320.dp, max = 480.dp)
                         .fillMaxWidth(0.85f)
-                        .wrapContentHeight()
+                        .heightIn(max = 720.dp).verticalScroll(rememberScrollState())
                 ) {
                     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                         val scope = this
@@ -458,7 +535,7 @@ fun DetailScreen(
                                     .fillMaxWidth()
                                     .padding(horizontal = 16.dp)
                                     // 向上偏移，减少与日历底部的间距
-                                    .offset(y = (-20).dp),
+                                    .padding(top = 8.dp),
                                 horizontalArrangement = Arrangement.End
                             ) {
                                 TextButton(onClick = { showDatePicker = false }) {
@@ -470,12 +547,9 @@ fun DetailScreen(
                                         val realIndex = pagerState.currentPage % events.size
                                         val currentEvent = events.getOrNull(realIndex)
                                         if (currentEvent != null) {
-                                            val isFuture = selectedMillis > System.currentTimeMillis()
-                                            val newMode = if (isFuture) DisplayMode.COUNT_DOWN else DisplayMode.ACCUMULATE
                                             onUpdateEvent(currentEvent.copy(
                                                 targetDate = selectedMillis,
-                                                isFuture = isFuture,
-                                                mode = newMode
+                                                repeatAnchorDate = if (selectedMillis == currentEvent.targetDate) currentEvent.repeatAnchorDate else null
                                             ))
                                         }
                                     }
@@ -598,7 +672,7 @@ fun EventDetailItem(
     val context = LocalContext.current
     val graphicsLayer = rememberGraphicsLayer()
     val rolloverMinutes = event.dayChangeMinutes
-    val targetLocalDate = Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.systemDefault()).toLocalDate()
+    val targetLocalDate = Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.of("UTC")).toLocalDate()
     val today = TimeUtils.getEffectiveToday(rolloverMinutes = rolloverMinutes)
     val days = TimeUtils.getDayCount(today, targetLocalDate)
 
@@ -629,7 +703,7 @@ fun EventDetailItem(
     }
 
     // 结合日期变化和进入页面状态的效果
-    LaunchedEffect(event.id, event.targetDate, isCurrentPage) {
+    LaunchedEffect(event.id, event.targetDate, isCurrentPage, today) {
         if (isCurrentPage) {
             // 检查是否需要从当前开始或重置
             if (animatedDays.value == 0f || animatedDays.value > days) {
@@ -683,10 +757,11 @@ fun EventDetailItem(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            val isCountdownToday = event.mode == DisplayMode.COUNT_DOWN && days == 0L
             val prefix = if (event.isFuture) stringResource(R.string.label_until) else stringResource(R.string.label_since)
             
             // 构造每9字换行且前缀紧跟末尾的标题（总长限35字）
-            val annotatedTitle = remember(event.title, prefix) {
+            val annotatedTitle = remember(event.title, prefix, isCountdownToday) {
                 val displayTitle = if (event.title.length > 35) {
                     event.title.take(32) + "..."
                 } else {
@@ -699,10 +774,12 @@ fun EventDetailItem(
                         append(chunk)
                         if (index < chunks.size - 1) append("\n")
                     }
-                    append(" ")
-                    pushStyle(androidx.compose.ui.text.SpanStyle(color = Color.White.copy(alpha = 0.7f)))
-                    append(prefix)
-                    pop()
+                    if (!isCountdownToday) {
+                        append(" ")
+                        pushStyle(androidx.compose.ui.text.SpanStyle(color = Color.White.copy(alpha = 0.7f)))
+                        append(prefix)
+                        pop()
+                    }
                 }
             }
 
@@ -742,11 +819,26 @@ fun EventDetailItem(
             val datePrefix = if (event.isFuture) stringResource(R.string.label_from) else stringResource(R.string.label_since_date)
             Text(
                 text = "$datePrefix $targetLocalDate",
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     color = Color.White.copy(alpha = 0.6f),
                     letterSpacing = 2.sp
                 )
             )
+
+            TimeUtils.formatAnniversary(context, event, today)?.let { anniversaryText ->
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = anniversaryText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        color = Color.White.copy(alpha = 0.75f),
+                        letterSpacing = 2.sp,
+                    ),
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
