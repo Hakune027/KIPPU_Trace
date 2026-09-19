@@ -1,11 +1,18 @@
 package com.kippu.trace.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
+import android.graphics.Typeface
+import android.os.Build
+import android.text.Spannable
+import android.text.SpannableStringBuilder
+import android.text.style.AbsoluteSizeSpan
+import android.text.style.StyleSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -13,14 +20,15 @@ import com.kippu.trace.MainActivity
 import com.kippu.trace.R
 import com.kippu.trace.data.AppDatabase
 import com.kippu.trace.model.DateEvent
+import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.utils.LanguageMode
 import com.kippu.trace.utils.LanguagePreferences
+import com.kippu.trace.utils.AnniversaryTextResult
 import com.kippu.trace.utils.TextUtils
+import com.kippu.trace.utils.TimeUtils
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +42,59 @@ object TraceWidgetUpdater {
     private const val PREF_PREFIX_KEY = "appwidget_"
     private val updateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+    const val ACTION_ROLLOVER = "com.kippu.trace.action.DAY_ROLLOVER"
+    private const val ROLLOVER_REQUEST_CODE = 1001
+
+    // 依据绑定事件的 日期变更时间 安排下一次精确唤醒，用于刷新小组件
+    fun scheduleDayRollover(context: Context) {
+        val appContext = context.applicationContext
+        updateScope.launch {
+            val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return@launch
+
+            val minutes = collectBoundDayChangeMinutes(appContext).ifEmpty { listOf(0) }
+            val now = System.currentTimeMillis()
+            val triggerMillis = minutes.minOf { TimeUtils.nextRolloverMillis(now, it) }
+
+            val intent = Intent(appContext, DayRolloverReceiver::class.java).setAction(ACTION_ROLLOVER)
+            val pendingIntent = PendingIntent.getBroadcast(
+                appContext,
+                ROLLOVER_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+
+            val canScheduleExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                alarmManager.canScheduleExactAlarms()
+
+            if (canScheduleExact) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            } else {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerMillis, pendingIntent)
+            }
+        }
+    }
+
+    // 收集所有已绑定小组件事件的 日期变更时间
+    private suspend fun collectBoundDayChangeMinutes(context: Context): List<Int> {
+        val manager = AppWidgetManager.getInstance(context)
+        val providers = listOf(
+            TraceWidget2x2Provider::class.java,
+            TraceWidget3x2Provider::class.java,
+            TraceWidget4x2Provider::class.java,
+        )
+        val dao = AppDatabase.getDatabase(context).eventDao()
+        val minutes = mutableListOf<Int>()
+        for (provider in providers) {
+            for (id in manager.getAppWidgetIds(ComponentName(context, provider))) {
+                val eventId = getWidgetEventId(context, id)
+                if (eventId != -1L) {
+                    dao.getEventById(eventId)?.let { minutes.add(it.dayChangeMinutes) }
+                }
+            }
+        }
+        return minutes
+    }
 
     // 保存小组件绑定的事件ID
     fun saveWidgetEventId(context: Context, appWidgetId: Int, eventId: Long) {
@@ -94,6 +155,7 @@ object TraceWidgetUpdater {
         widgetSize: TraceWidgetSize,
         requestedIds: IntArray? = null,
     ) {
+        AppDatabase.getDatabase(context).eventDao().advanceRepeatingEvents()
         val appWidgetIds = requestedIds
             ?.takeIf { it.isNotEmpty() }
             ?: appWidgetManager.getAppWidgetIds(ComponentName(context, providerClass))
@@ -153,30 +215,50 @@ object TraceWidgetUpdater {
             views.setViewVisibility(R.id.widget_date, View.GONE)
             views.setViewVisibility(R.id.widget_days, View.GONE)
             views.setViewVisibility(R.id.widget_day_unit, View.GONE)
+            views.setViewVisibility(R.id.widget_anniversary, View.GONE)
             
             // 点击打开选择界面
             views.setOnClickPendingIntent(R.id.widget_root, createConfigIntent(context, appWidgetId))
         } else {
             // 有效状态显示并填充数据
             views.setViewVisibility(R.id.widget_title, View.VISIBLE)
-            views.setViewVisibility(R.id.widget_days, View.VISIBLE)
-            views.setViewVisibility(R.id.widget_day_unit, View.VISIBLE)
 
             val dateText = formatTargetDate(event.targetDate)
-            val days = calculateDays(event.targetDate).toString()
+            val dayCount = calculateDays(event.dayChangeMinutes, event.targetDate)
             val localizedCtx = getLocalizedContext(context)
+            val isCountdownToday = event.mode == DisplayMode.COUNT_DOWN && dayCount == 0L
+            val days = dayCount.toString()
             val prefix = localizedCtx.getString(if (event.isFuture) R.string.label_until else R.string.label_since)
+            val anniversary = TimeUtils.getAnniversaryText(localizedCtx, event)
+            val anniversaryText = anniversary?.text
 
             views.setTextViewText(R.id.widget_title, event.title)
             views.setTextViewText(R.id.widget_prefix, prefix)
             views.setTextViewText(R.id.widget_date, dateText)
-            views.setTextViewText(R.id.widget_days, days)
+            views.setTextViewText(
+                R.id.widget_days,
+                anniversary?.let { formatWidgetAnniversary(it, widgetSize) } ?: days,
+            )
             views.setTextViewText(R.id.widget_day_unit, localizedCtx.getString(R.string.day_unit))
+            views.setTextViewText(R.id.widget_anniversary, "")
             
-            views.setViewVisibility(R.id.widget_prefix, View.VISIBLE)
             views.setViewVisibility(R.id.widget_date, View.VISIBLE)
+            views.setViewVisibility(
+                R.id.widget_anniversary,
+                View.GONE,
+            )
+            val regularCounterVisibility = if (anniversaryText == null) View.VISIBLE else View.GONE
+            views.setViewVisibility(
+                R.id.widget_prefix,
+                if (isCountdownToday) View.GONE else regularCounterVisibility,
+            )
+            views.setViewVisibility(R.id.widget_days, View.VISIBLE)
+            views.setViewVisibility(
+                R.id.widget_day_unit,
+                regularCounterVisibility,
+            )
             
-            applySizeTuning(views, widgetSize, event.title, days.toLong())
+            applySizeTuning(views, widgetSize, event.title, dayCount, anniversaryText != null)
             // 点击有内容的小组件直接打开对应卡片详情页
             views.setOnClickPendingIntent(R.id.widget_root, createOpenAppIntent(context, event.id))
         }
@@ -184,7 +266,75 @@ object TraceWidgetUpdater {
         return views
     }
 
-    private fun applySizeTuning(views: RemoteViews, widgetSize: TraceWidgetSize, title: String, daysCount: Long) {
+    private fun formatWidgetAnniversary(
+        anniversary: AnniversaryTextResult,
+        widgetSize: TraceWidgetSize,
+    ): CharSequence {
+        val counterCount = anniversary.counters.size
+        val (valueSize, labelSize) = when (widgetSize) {
+            TraceWidgetSize.TWO_BY_TWO -> if (counterCount > 1) 22 to 9 else 30 to 11
+            TraceWidgetSize.THREE_BY_TWO -> if (counterCount > 1) 30 to 11 else 40 to 13
+            TraceWidgetSize.FOUR_BY_TWO -> if (counterCount > 1) 34 to 12 else 40 to 14
+        }
+        val builder = SpannableStringBuilder()
+
+        if (anniversary.counters.isEmpty()) {
+            builder.append(anniversary.text)
+            builder.setSpan(
+                AbsoluteSizeSpan(labelSize + 3, true),
+                0,
+                builder.length,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+            return builder
+        }
+
+        anniversary.counters.forEachIndexed { index, counter ->
+            if (index > 0) builder.append("  ")
+
+            val prefixStart = builder.length
+            builder.append(counter.prefix)
+            applyWidgetTextSize(builder, prefixStart, builder.length, labelSize)
+
+            val valueStart = builder.length
+            builder.append(counter.value)
+            applyWidgetTextSize(builder, valueStart, builder.length, valueSize)
+            builder.setSpan(
+                StyleSpan(Typeface.BOLD),
+                valueStart,
+                builder.length,
+                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+
+            val suffixStart = builder.length
+            builder.append(counter.suffix)
+            applyWidgetTextSize(builder, suffixStart, builder.length, labelSize)
+        }
+        return builder
+    }
+
+    private fun applyWidgetTextSize(
+        text: SpannableStringBuilder,
+        start: Int,
+        end: Int,
+        sizeSp: Int,
+    ) {
+        if (start == end) return
+        text.setSpan(
+            AbsoluteSizeSpan(sizeSp, true),
+            start,
+            end,
+            Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+        )
+    }
+
+    private fun applySizeTuning(
+        views: RemoteViews,
+        widgetSize: TraceWidgetSize,
+        title: String,
+        daysCount: Long,
+        showsAnniversary: Boolean,
+    ) {
         val isLongTitle = title.length > 8 || TextUtils.getVisualWidth(title) > 15f
         val isLargeDays = daysCount >= 1000
 
@@ -200,6 +350,11 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
+                views.setTextViewTextSize(
+                    R.id.widget_anniversary,
+                    TypedValue.COMPLEX_UNIT_SP,
+                    if (isLongTitle) 13f else 15f,
+                )
                 // 2x2 空间有限，不显示年月日
                 views.setViewVisibility(R.id.widget_date, View.GONE)
             }
@@ -214,6 +369,11 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
+                views.setTextViewTextSize(
+                    R.id.widget_anniversary,
+                    TypedValue.COMPLEX_UNIT_SP,
+                    if (isLongTitle) 14f else 16f,
+                )
             }
             TraceWidgetSize.FOUR_BY_TWO -> {
                 val (titleSize, daysSize, prefixSize, unitSize) = when {
@@ -226,7 +386,24 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
+                views.setTextViewTextSize(
+                    R.id.widget_anniversary,
+                    TypedValue.COMPLEX_UNIT_SP,
+                    if (isLongTitle) 16f else 18f,
+                )
             }
+        }
+
+        if (showsAnniversary) {
+            views.setTextViewTextSize(
+                R.id.widget_title,
+                TypedValue.COMPLEX_UNIT_SP,
+                when (widgetSize) {
+                    TraceWidgetSize.TWO_BY_TWO -> if (isLongTitle) 13f else 15f
+                    TraceWidgetSize.THREE_BY_TWO -> if (isLongTitle) 16f else 18f
+                    TraceWidgetSize.FOUR_BY_TWO -> if (isLongTitle) 18f else 20f
+                },
+            )
         }
     }
 
@@ -256,17 +433,17 @@ object TraceWidgetUpdater {
         )
     }
 
-    private fun calculateDays(targetDateMillis: Long): Long {
+    private fun calculateDays(dayChangeMinutes: Int, targetDateMillis: Long): Long {
         val targetLocalDate = Instant.ofEpochMilli(targetDateMillis)
-            .atZone(ZoneId.systemDefault())
+            .atZone(ZoneId.of("UTC"))
             .toLocalDate()
-        val today = LocalDate.now()
-        return ChronoUnit.DAYS.between(today, targetLocalDate).let { if (it < 0) -it else it }
+        val today = TimeUtils.getEffectiveToday(rolloverMinutes = dayChangeMinutes)
+        return TimeUtils.getDayCount(today, targetLocalDate)
     }
 
     private fun formatTargetDate(targetDateMillis: Long): String {
         return Instant.ofEpochMilli(targetDateMillis)
-            .atZone(ZoneId.systemDefault())
+            .atZone(ZoneId.of("UTC"))
             .toLocalDate()
             .format(dateFormatter)
     }

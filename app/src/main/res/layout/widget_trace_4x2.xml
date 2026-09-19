@@ -69,6 +69,22 @@
                 android:lineHeight="28sp" />
 
             <TextView
+                android:id="@+id/widget_anniversary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:ellipsize="end"
+                android:includeFontPadding="false"
+                android:maxLines="2"
+                android:shadowColor="#80000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="10"
+                android:textColor="#FFFFFFFF"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/widget_date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -123,7 +139,6 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:layout_marginBottom="10dp"
                 android:includeFontPadding="false"
                 android:shadowColor="#40000000"
                 android:shadowDx="0"

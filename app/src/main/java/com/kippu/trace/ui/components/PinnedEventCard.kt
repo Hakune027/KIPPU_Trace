@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
@@ -30,25 +31,31 @@ import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.utils.TextUtils
+import com.kippu.trace.utils.TimeUtils
 import com.kippu.trace.utils.fadeRightEdge
 import com.kippu.trace.utils.fadeLastLineEdge
 import com.kippu.trace.utils.getLastLineHeightFraction
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 @Composable
 fun PinnedEventCard(
     event: DateEvent,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    nowMillis: Long = System.currentTimeMillis(),
 ) {
+    val rolloverMinutes = event.dayChangeMinutes
+
     val targetLocalDate = Instant.ofEpochMilli(event.targetDate)
-        .atZone(ZoneId.systemDefault())
+        .atZone(ZoneId.of("UTC"))
         .toLocalDate()
-    val today = LocalDate.now()
-    val days = ChronoUnit.DAYS.between(today, targetLocalDate).let { if (it < 0) -it else it }
+    val today = TimeUtils.getEffectiveToday(nowMillis, rolloverMinutes)
+    val days = TimeUtils.getDayCount(today, targetLocalDate)
+
+    val context = LocalContext.current
+    val anniversary = TimeUtils.getAnniversaryText(context, event, today)
+    val anniversaryText = anniversary?.text
 
     Card(
         onClick = onClick,
@@ -90,7 +97,7 @@ fun PinnedEventCard(
             ) {
                 val visualWidth = TextUtils.getVisualWidth(event.title)
                 
-                if (visualWidth > 15.0f) {
+                if (visualWidth > 15.0f && anniversaryText == null) {
                     var titleLineCount by remember(event.title) { mutableStateOf(1) }
 
                     // 类型 3：4 行 带超强淡出
@@ -135,7 +142,7 @@ fun PinnedEventCard(
                                     style = MaterialTheme.typography.displayMedium.copy(
                                         color = Color.White,
                                         shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), blurRadius = 12f),
-                                        fontSize = 48.sp 
+                                        fontSize = 48.sp
                                     )
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -159,7 +166,7 @@ fun PinnedEventCard(
                     }
                 } else {
                     // 类型 2：标题在天数上方
-                    val isCollision = visualWidth > 5.5f || (visualWidth >= 4.0f && days >= 1000)
+                    val isCollision = anniversaryText != null || visualWidth > 5.5f || (visualWidth >= 4.0f && days >= 1000)
                     
                     if (isCollision) {
                         Column(
@@ -183,34 +190,112 @@ fun PinnedEventCard(
                                 )
                             )
 
-                            Row(verticalAlignment = Alignment.Bottom) {
-                                Text(
-                                    text = days.toString(),
-                                    style = MaterialTheme.typography.displayMedium.copy(
-                                        color = Color.White,
-                                        shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), blurRadius = 12f),
-                                        fontSize = 48.sp 
+                            if (anniversaryText != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.Bottom,
+                                ) {
+                                    Text(
+                                        text = targetLocalDate.toString(),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            color = Color.White.copy(alpha = 0.7f),
+                                            fontWeight = FontWeight.Normal,
+                                        ),
                                     )
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = stringResource(R.string.day_unit),
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        color = Color.White.copy(alpha = 0.8f),
-                                        fontSize = 16.sp
-                                    ),
-                                    modifier = Modifier.padding(bottom = 12.dp)
-                                )
+                                    if (anniversary.counters.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier.padding(start = 16.dp),
+                                            verticalAlignment = Alignment.Bottom,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End),
+                                        ) {
+                                            anniversary.counters.forEach { counter ->
+                                                Row(verticalAlignment = Alignment.Bottom) {
+                                                    Text(
+                                                        text = counter.prefix,
+                                                        style = MaterialTheme.typography.labelMedium.copy(
+                                                            color = Color.White.copy(alpha = 0.8f),
+                                                            fontSize = 16.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                        ),
+                                                        modifier = Modifier.padding(bottom = 10.dp),
+                                                    )
+                                                    Text(
+                                                        text = counter.value,
+                                                        style = MaterialTheme.typography.displayMedium.copy(
+                                                            color = Color.White,
+                                                            shadow = Shadow(
+                                                                color = Color.Black.copy(alpha = 0.5f),
+                                                                blurRadius = 12f,
+                                                            ),
+                                                            fontSize = 48.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                        ),
+                                                    )
+                                                    Text(
+                                                        text = counter.suffix,
+                                                        style = MaterialTheme.typography.labelMedium.copy(
+                                                            color = Color.White.copy(alpha = 0.8f),
+                                                            fontSize = 16.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                        ),
+                                                        modifier = Modifier.padding(bottom = 10.dp, start = 2.dp),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            text = anniversaryText,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(start = 16.dp),
+                                            style = MaterialTheme.typography.titleMedium.copy(
+                                                color = Color.White,
+                                                shadow = Shadow(
+                                                    color = Color.Black.copy(alpha = 0.5f),
+                                                    blurRadius = 12f,
+                                                ),
+                                                fontWeight = FontWeight.Bold,
+                                            ),
+                                        )
+                                    }
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.Bottom) {
+                                    Text(
+                                        text = days.toString(),
+                                        style = MaterialTheme.typography.displayMedium.copy(
+                                            color = Color.White,
+                                            shadow = Shadow(color = Color.Black.copy(alpha = 0.5f), blurRadius = 12f),
+                                            fontSize = 48.sp
+                                        )
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.day_unit),
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 16.sp
+                                        ),
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+                                }
                             }
 
-                            Text(
-                                text = targetLocalDate.toString(),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    color = Color.White.copy(alpha = 0.7f),
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                modifier = Modifier.offset(y = (-4).dp)
-                            )
+                            if (anniversaryText == null) {
+                                Text(
+                                    text = targetLocalDate.toString(),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = Color.White.copy(alpha = 0.7f),
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    modifier = Modifier.offset(y = (-4).dp)
+                                )
+                            }
                         }
                     } else {
                         // 类型 1：短标题 无淡出

@@ -6,8 +6,10 @@ import kotlinx.coroutines.flow.Flow
 class EventRepository(private val eventDao: EventDao) {
     val allEvents: Flow<List<DateEvent>> = eventDao.getAllEvents()
 
+    suspend fun advanceRepeatingEvents() = eventDao.advanceRepeatingEvents()
+
     suspend fun insert(event: DateEvent) {
-        eventDao.insertEvent(event)
+        eventDao.insertEvent(com.kippu.trace.utils.AnniversaryUtils.advance(event))
     }
 
     suspend fun delete(event: DateEvent) {

@@ -12,6 +12,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -52,7 +54,11 @@ import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.utils.FileUtils
+import com.kippu.trace.utils.TimeUtils
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.kippu.trace.ui.components.AnniversarySettings
+import com.kippu.trace.ui.components.AnniversarySettingsState
 import com.kippu.trace.ui.components.NormalEventCard
 import com.kippu.trace.ui.components.PinnedEventCard
 import java.time.Instant
@@ -76,7 +82,24 @@ fun HomeScreen(
 
     var eventToDelete by remember { mutableStateOf<DateEvent?>(null) }
     var editingEvent by remember { mutableStateOf<DateEvent?>(null) }
-    val editSheetState = rememberModalBottomSheetState()
+    var originalEditingEvent by remember { mutableStateOf<DateEvent?>(null) }
+    var showDiscardConfirmation by remember { mutableStateOf(false) }
+    val hasUnsavedEdit = rememberUpdatedState(
+        editingEvent != null && editingEvent != originalEditingEvent,
+    )
+    // 编辑内容会随周期设置开关改变高度。禁用半展开锚点，避免重算锚点时
+    // 弹层短暂回落到半屏，再跳回完整展开位置。
+    val editSheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { value ->
+            if (value == SheetValue.Hidden && hasUnsavedEdit.value) {
+                showDiscardConfirmation = true
+                false
+            } else {
+                true
+            }
+        },
+    )
 
     val editImagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -90,6 +113,19 @@ fun HomeScreen(
     }
 
     val lazyListState = rememberLazyListState()
+
+    // 各事件可能有各自的 日期变更时间 ：等到下一个最早的切换点再刷新一次，未到点不重组。
+    var nowMillis by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(events.map { it.dayChangeMinutes }) {
+        if (events.isEmpty()) return@LaunchedEffect
+        nowMillis = System.currentTimeMillis()
+        while (true) {
+            val now = System.currentTimeMillis()
+            val next = events.minOf { TimeUtils.nextRolloverMillis(now, it.dayChangeMinutes) }
+            delay((next - now).coerceAtLeast(0L) + 50)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
 
     if (eventToDelete != null) {
         AlertDialog(
@@ -152,10 +188,14 @@ fun HomeScreen(
                                 isDeleting = eventToDelete?.id == event.id,
                                 isEditing = editingEvent?.id == event.id,
                                 onTrashClick = { eventToDelete = event },
-                                onEditClick = { editingEvent = event }
+                                onEditClick = {
+                                    showDiscardConfirmation = false
+                                    originalEditingEvent = event
+                                    editingEvent = event
+                                }
                             ) {
                                 // 编辑中的卡片直接读取 editingEvent 实时预览改动
-                                PinnedEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) })
+                                PinnedEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) }, nowMillis = nowMillis)
                             }
                         }
 
@@ -165,9 +205,13 @@ fun HomeScreen(
                                 isDeleting = eventToDelete?.id == event.id,
                                 isEditing = editingEvent?.id == event.id,
                                 onTrashClick = { eventToDelete = event },
-                                onEditClick = { editingEvent = event }
+                                onEditClick = {
+                                    showDiscardConfirmation = false
+                                    originalEditingEvent = event
+                                    editingEvent = event
+                                }
                             ) {
-                                NormalEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) })
+                                NormalEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) }, nowMillis = nowMillis)
                             }
                         }
                     }
@@ -188,12 +232,16 @@ fun HomeScreen(
                                 isDeleting = eventToDelete?.id == event.id,
                                 isEditing = editingEvent?.id == event.id,
                                 onTrashClick = { eventToDelete = event },
-                                onEditClick = { editingEvent = event }
+                                onEditClick = {
+                                    showDiscardConfirmation = false
+                                    originalEditingEvent = event
+                                    editingEvent = event
+                                }
                             ) {
                                 if (event.isPinned) {
-                                    PinnedEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) })
+                                    PinnedEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) }, nowMillis = nowMillis)
                                 } else {
-                                    NormalEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) })
+                                    NormalEventCard(event = if (editingEvent?.id == event.id) editingEvent!! else event, onClick = { onEventClick(event) }, nowMillis = nowMillis)
                                 }
                             }
                         }
@@ -205,7 +253,8 @@ fun HomeScreen(
 
     if (editingEvent != null) {
         val event = editingEvent!!
-        val titleState = rememberTextFieldState()
+        val titleState = rememberTextFieldState(event.title)
+        val cycleSettings = remember(event.id) { AnniversarySettingsState(event) }
         LaunchedEffect(event.title) {
             if (titleState.text.toString() != event.title) {
                 titleState.edit {
@@ -220,7 +269,22 @@ fun HomeScreen(
                     editingEvent = editingEvent?.copy(title = text)
                 }
         }
+        SideEffect {
+            editingEvent?.let { current ->
+                val updated = cycleSettings.applyTo(current)
+                if (updated != current) editingEvent = updated
+            }
+        }
         val showEditDatePicker = remember { mutableStateOf(false) }
+        val showDayChangeDialog = remember { mutableStateOf(false) }
+        val requestEditDismiss = {
+            if (editingEvent == originalEditingEvent) {
+                showDiscardConfirmation = false
+                editingEvent = null
+            } else {
+                showDiscardConfirmation = true
+            }
+        }
 
         if (showEditDatePicker.value) {
             EditDatePickerDialog(
@@ -228,7 +292,7 @@ fun HomeScreen(
                 onConfirm = { millis ->
                     editingEvent = editingEvent?.copy(
                         targetDate = millis,
-                        mode = if (millis > System.currentTimeMillis()) DisplayMode.COUNT_DOWN else DisplayMode.ACCUMULATE
+                        repeatAnchorDate = if (millis == event.targetDate) event.repeatAnchorDate else null,
                     )
                     showEditDatePicker.value = false
                 },
@@ -236,17 +300,67 @@ fun HomeScreen(
             )
         }
 
+        if (showDayChangeDialog.value) {
+            DayChangeTimeDialog(
+                initialMinutes = event.dayChangeMinutes,
+                onConfirm = { minutes ->
+                    editingEvent = editingEvent?.copy(dayChangeMinutes = minutes)
+                    showDayChangeDialog.value = false
+                },
+                onDismiss = { showDayChangeDialog.value = false },
+            )
+        }
+
+        if (showDiscardConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showDiscardConfirmation = false },
+                title = {
+                    Text(
+                        text = stringResource(R.string.unsaved_changes_title),
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    )
+                },
+                text = {
+                    Text(
+                        text = stringResource(R.string.unsaved_changes_message),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showDiscardConfirmation = false
+                            editingEvent = null
+                            originalEditingEvent = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) {
+                        Text(stringResource(R.string.discard_changes))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDiscardConfirmation = false }) {
+                        Text(stringResource(R.string.continue_editing))
+                    }
+                },
+                shape = RoundedCornerShape(28.dp),
+                containerColor = MaterialTheme.colorScheme.surface,
+            )
+        }
+
         ModalBottomSheet(
-            onDismissRequest = { editingEvent = null },
+            onDismissRequest = requestEditDismiss,
             sheetState = editSheetState,
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
                     .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Text(
                     text = stringResource(R.string.edit_timetrace),
@@ -283,7 +397,7 @@ fun HomeScreen(
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     val editTargetLocalDate = remember(event.targetDate) {
-                        Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.systemDefault()).toLocalDate()
+                        Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.of("UTC")).toLocalDate()
                     }
                     val editFormattedDate = remember(editTargetLocalDate) {
                         editTargetLocalDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
@@ -323,46 +437,93 @@ fun HomeScreen(
                     }
                 }
 
-                ModeSwitcher(selectedMode = event.mode, onModeSelected = { editingEvent = editingEvent?.copy(mode = it) })
-
-                Row(
+                Card(
+                    onClick = { showDayChangeDialog.value = true },
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    shape = RoundedCornerShape(28.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f))
                 ) {
-                    Text(stringResource(R.string.pin_to_top), style = MaterialTheme.typography.titleSmall)
-                    Switch(checked = event.isPinned, onCheckedChange = { editingEvent = editingEvent?.copy(isPinned = it) })
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = stringResource(R.string.day_change_time),
+                            style = MaterialTheme.typography.labelLarge, 
+                            fontWeight = FontWeight.Bold,                
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(start = 15.dp)
+                        )
+                        Text(
+                            text = TimeUtils.formatMinutesOfDay(event.dayChangeMinutes),
+                            style = MaterialTheme.typography.labelLarge, 
+                            fontWeight = FontWeight.Bold,               
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(end = 40.dp)
+                        )
+                    }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModeSwitcher(
+                    selectedMode = event.mode,
+                    onModeSelected = {
+                        editingEvent = editingEvent?.copy(
+                            mode = it,
+                            isFuture = it == DisplayMode.COUNT_DOWN,
+                        )
+                    },
+                )
+
+                Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(stringResource(R.string.mask_intensity), style = MaterialTheme.typography.titleSmall)
-                        Text("${((event.maskOpacity) * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary))
+                        Text(stringResource(R.string.pin_to_top), style = MaterialTheme.typography.titleSmall)
+                        Switch(checked = event.isPinned, onCheckedChange = { editingEvent = editingEvent?.copy(isPinned = it) })
                     }
-                    Slider(
-                        value = event.maskOpacity,
-                        onValueChange = { editingEvent = editingEvent?.copy(maskOpacity = it) },
-                        valueRange = 0.1f..0.9f,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        colors = SliderDefaults.colors(
-                            inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+
+                    AnniversarySettings(cycleSettings, event.mode)
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(stringResource(R.string.mask_intensity), style = MaterialTheme.typography.titleSmall)
+                            Text("${((event.maskOpacity) * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.primary))
+                        }
+                        Slider(
+                            value = event.maskOpacity,
+                            onValueChange = { editingEvent = editingEvent?.copy(maskOpacity = it) },
+                            valueRange = 0.1f..0.9f,
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            colors = SliderDefaults.colors(
+                                inactiveTrackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+                            )
                         )
-                    )
+                    }
                 }
 
                 Button(
+                    enabled = cycleSettings.valid(event.mode),
                     onClick = {
                         onUpdateEvent(
-                            event.copy(
+                            cycleSettings.applyTo(event).copy(
                                 title = titleState.text.toString().ifEmpty { context.getString(R.string.untitled) },
-                                isFuture = event.targetDate > System.currentTimeMillis()
+                                isFuture = event.mode == DisplayMode.COUNT_DOWN,
                             )
                         )
+                        showDiscardConfirmation = false
                         editingEvent = null
+                        originalEditingEvent = null
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(14.dp)
@@ -371,7 +532,7 @@ fun HomeScreen(
                 }
 
                 OutlinedButton(
-                    onClick = { editingEvent = null },
+                    onClick = requestEditDismiss,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
