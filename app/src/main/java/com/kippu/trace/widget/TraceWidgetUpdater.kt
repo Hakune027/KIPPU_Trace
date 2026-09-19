@@ -215,7 +215,6 @@ object TraceWidgetUpdater {
             views.setViewVisibility(R.id.widget_date, View.GONE)
             views.setViewVisibility(R.id.widget_days, View.GONE)
             views.setViewVisibility(R.id.widget_day_unit, View.GONE)
-            views.setViewVisibility(R.id.widget_anniversary, View.GONE)
             
             // 点击打开选择界面
             views.setOnClickPendingIntent(R.id.widget_root, createConfigIntent(context, appWidgetId))
@@ -240,13 +239,8 @@ object TraceWidgetUpdater {
                 anniversary?.let { formatWidgetAnniversary(it, widgetSize) } ?: days,
             )
             views.setTextViewText(R.id.widget_day_unit, localizedCtx.getString(R.string.day_unit))
-            views.setTextViewText(R.id.widget_anniversary, "")
             
             views.setViewVisibility(R.id.widget_date, View.VISIBLE)
-            views.setViewVisibility(
-                R.id.widget_anniversary,
-                View.GONE,
-            )
             val regularCounterVisibility = if (anniversaryText == null) View.VISIBLE else View.GONE
             views.setViewVisibility(
                 R.id.widget_prefix,
@@ -350,11 +344,6 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
-                views.setTextViewTextSize(
-                    R.id.widget_anniversary,
-                    TypedValue.COMPLEX_UNIT_SP,
-                    if (isLongTitle) 13f else 15f,
-                )
                 // 2x2 空间有限，不显示年月日
                 views.setViewVisibility(R.id.widget_date, View.GONE)
             }
@@ -369,11 +358,6 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
-                views.setTextViewTextSize(
-                    R.id.widget_anniversary,
-                    TypedValue.COMPLEX_UNIT_SP,
-                    if (isLongTitle) 14f else 16f,
-                )
             }
             TraceWidgetSize.FOUR_BY_TWO -> {
                 val (titleSize, daysSize, prefixSize, unitSize) = when {
@@ -386,11 +370,6 @@ object TraceWidgetUpdater {
                 views.setTextViewTextSize(R.id.widget_prefix, TypedValue.COMPLEX_UNIT_SP, prefixSize)
                 views.setTextViewTextSize(R.id.widget_days, TypedValue.COMPLEX_UNIT_SP, daysSize)
                 views.setTextViewTextSize(R.id.widget_day_unit, TypedValue.COMPLEX_UNIT_SP, unitSize)
-                views.setTextViewTextSize(
-                    R.id.widget_anniversary,
-                    TypedValue.COMPLEX_UNIT_SP,
-                    if (isLongTitle) 16f else 18f,
-                )
             }
         }
 

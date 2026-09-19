@@ -52,7 +52,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.kippu.trace.ui.components.LocalEventDate
 import java.time.LocalDate
 import kotlinx.coroutines.delay
 import androidx.navigation.compose.NavHost
@@ -75,7 +74,7 @@ import java.util.Locale
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private var currentDate by mutableStateOf(LocalDate.now())
+    private var currentDate = LocalDate.now()
 
     // 小组件点击传入的 deep link eventId
     var deepLinkEventId by mutableStateOf<Long?>(null)
@@ -172,19 +171,17 @@ class MainActivity : ComponentActivity() {
             }
 
             KIPPU_TraceTheme(darkTheme = darkTheme) {
-                CompositionLocalProvider(LocalEventDate provides currentDate) {
-                    MainApp(
-                        events = events,
-                        themeMode = themeMode,
-                        onThemeModeChange = { mode ->
-                            themeMode = mode
-                            ThemePreferences.setThemeMode(context, mode)
-                        },
-                        onAddEvent = { eventViewModel.addEvent(it) },
-                        onDeleteEvent = { eventViewModel.deleteEvent(it) },
-                        initialDetailEventId = deepLinkEventId,
-                    )
-                }
+                MainApp(
+                    events = events,
+                    themeMode = themeMode,
+                    onThemeModeChange = { mode ->
+                        themeMode = mode
+                        ThemePreferences.setThemeMode(context, mode)
+                    },
+                    onAddEvent = { eventViewModel.addEvent(it) },
+                    onDeleteEvent = { eventViewModel.deleteEvent(it) },
+                    initialDetailEventId = deepLinkEventId,
+                )
             }
         }
     }

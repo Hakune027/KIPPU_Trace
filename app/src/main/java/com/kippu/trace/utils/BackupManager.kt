@@ -5,6 +5,7 @@ import android.net.Uri
 import com.kippu.trace.model.AnniversaryType
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
+import com.kippu.trace.model.RepeatMode
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -162,8 +163,8 @@ object BackupManager {
             showWeek = optBoolean("showWeek", true),
             anniversaryMessage = optString("anniversaryMessage", ""),
             repeatMode = runCatching {
-                com.kippu.trace.model.RepeatMode.valueOf(optString("repeatMode", "NONE"))
-            }.getOrDefault(com.kippu.trace.model.RepeatMode.NONE),
+                RepeatMode.valueOf(optString("repeatMode", RepeatMode.NONE.name))
+            }.getOrDefault(RepeatMode.NONE),
             repeatInterval = optInt("repeatInterval", 1).coerceAtLeast(1),
             repeatCustomDays = optInt("repeatCustomDays", 100).coerceAtLeast(1),
             repeatAnchorDate = if (isNull("repeatAnchorDate")) null else optLong("repeatAnchorDate"),

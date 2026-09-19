@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -93,17 +94,26 @@ class AnniversarySettingsState(event: DateEvent? = null) {
         else -> true
     }
 
-    fun applyTo(event: DateEvent): DateEvent = event.copy(
-        anniversaryType = type, customDays = customDays.toIntOrNull() ?: 100,
-        showYear = year, showMonth = month, showWeek = week,
-        anniversaryMessage = message.trim(), repeatMode = repeat,
-        repeatInterval = repeatInterval.toIntOrNull() ?: 1,
-        repeatCustomDays = repeatDays.toIntOrNull() ?: 100,
-        repeatAnchorDate = if (event.repeatMode == repeat &&
-            event.repeatInterval == (repeatInterval.toIntOrNull() ?: 1) &&
-            event.repeatCustomDays == (repeatDays.toIntOrNull() ?: 100))
-            event.repeatAnchorDate else null,
-    )
+    fun applyTo(event: DateEvent): DateEvent {
+        val interval = repeatInterval.toIntOrNull() ?: 1
+        val customRepeatDays = repeatDays.toIntOrNull() ?: 100
+        val keepsRepeatAnchor = event.repeatMode == repeat &&
+            event.repeatInterval == interval &&
+            event.repeatCustomDays == customRepeatDays
+
+        return event.copy(
+            anniversaryType = type,
+            customDays = customDays.toIntOrNull() ?: 100,
+            showYear = year,
+            showMonth = month,
+            showWeek = week,
+            anniversaryMessage = message.trim(),
+            repeatMode = repeat,
+            repeatInterval = interval,
+            repeatCustomDays = customRepeatDays,
+            repeatAnchorDate = event.repeatAnchorDate.takeIf { keepsRepeatAnchor },
+        )
+    }
 }
 
 @OptIn(
@@ -268,7 +278,7 @@ private fun AnniversaryTypeSwitcher(
 
         Box(
             modifier = Modifier
-                .offset(x = indicatorOffset)
+                .offset { IntOffset(indicatorOffset.roundToPx(), 0) }
                 .width(indicatorWidth)
                 .fillMaxHeight()
                 .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp)),
@@ -316,18 +326,12 @@ private fun AnniversaryTypeOption(
 
 @Composable
 private fun IntervalInput(value: String, onChange: (String) -> Unit, unit: Int) {
-    val invalid = (value.toIntOrNull() ?: 0) <= 0
-    OutlinedTextField(
+    PositiveNumberInput(
         value = value,
-        onValueChange = { onChange(it.filter { char -> char in '0'..'9' }.take(6)) },
-        label = { Text(stringResource(R.string.repeat_interval_label)) },
+        onChange = onChange,
+        label = R.string.repeat_interval_label,
+        maxLength = 6,
         suffix = { Text(stringResource(unit)) },
-        singleLine = true,
-        isError = invalid,
-        supportingText = { if (invalid) Text(stringResource(R.string.positive_days_required)) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -389,12 +393,39 @@ private fun RepeatModeOption(
 
 @Composable
 private fun DaysInput(value: String, onChange: (String) -> Unit) {
+    PositiveNumberInput(
+        value = value,
+        onChange = onChange,
+        label = R.string.anniversary_custom_days_label,
+        maxLength = 10,
+    )
+}
+
+@Composable
+private fun PositiveNumberInput(
+    value: String,
+    onChange: (String) -> Unit,
+    label: Int,
+    maxLength: Int,
+    suffix: @Composable (() -> Unit)? = null,
+) {
     val invalid = (value.toIntOrNull() ?: 0) <= 0
-    OutlinedTextField(value = value, onValueChange = { onChange(it.filter { char -> char in '0'..'9' }.take(10)) },
-        label = { Text(stringResource(R.string.anniversary_custom_days_label)) }, singleLine = true,
-        isError = invalid, supportingText = { if (invalid) Text(stringResource(R.string.positive_days_required)) },
+    OutlinedTextField(
+        value = value,
+        onValueChange = { input ->
+            onChange(input.filter { char -> char in '0'..'9' }.take(maxLength))
+        },
+        label = { Text(stringResource(label)) },
+        suffix = suffix,
+        singleLine = true,
+        isError = invalid,
+        supportingText = {
+            if (invalid) Text(stringResource(R.string.positive_days_required))
+        },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth())
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable

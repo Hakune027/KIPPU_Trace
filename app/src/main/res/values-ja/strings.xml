@@ -82,12 +82,9 @@
     <string name="accumulate_mode">経過何日</string>
     <string name="day_unit">日</string>
     <string name="anniversary_section">記念日</string>
-    <string name="anniversary_none">日数</string>
-    <string name="anniversary_custom">カスタム</string>
-    <string name="anniversary_preset">プリセット</string>
     <string name="anniversary_days_tab">記念日数</string>
     <string name="anniversary_preset_tab">プリセット記念日</string>
-    <string name="anniversary_custom_prefix">%1$d日の第</string>
+    <string name="anniversary_custom_prefix">{days}日の第</string>
     <string name="anniversary_custom_suffix">回</string>
     <string name="anniversary_counter_year_prefix">1年の第</string>
     <string name="anniversary_counter_year_suffix">回</string>
@@ -95,7 +92,6 @@
     <string name="anniversary_counter_month_suffix">回</string>
     <string name="anniversary_counter_week_prefix">1週間の第</string>
     <string name="anniversary_counter_week_suffix">回</string>
-    <string name="anniversary_full_text">%1$s</string>
     <string name="anniversary_unit_year">年</string>
     <string name="anniversary_unit_month">月</string>
     <string name="anniversary_unit_week">週</string>
@@ -119,12 +115,7 @@
     <string name="repeat_section">繰り返し</string>
     <string name="cycle_settings">周期設定</string>
     <string name="cycle_settings_subtitle">記念日または繰り返し周期を変更</string>
-    <string name="repeat_type_label">繰り返しの種類</string>
     <string name="repeat_interval_label">間隔</string>
-    <string name="repeat_none">なし</string>
-    <string name="repeat_year">毎年</string>
-    <string name="repeat_month">毎月</string>
-    <string name="repeat_week">毎週</string>
     <string name="repeat_hint">期限を過ぎると目標日が自動的に進みます。</string>
     <string name="anniversary_message">記念日のメッセージ（任意）</string>
     <string name="positive_days_required">正の整数を入力してください</string>

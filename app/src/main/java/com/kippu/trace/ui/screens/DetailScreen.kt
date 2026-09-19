@@ -827,7 +827,7 @@ fun EventDetailItem(
                 )
             )
 
-            TimeUtils.formatAnniversary(context, event, today)?.let { anniversaryText ->
+            TimeUtils.getAnniversaryText(context, event, today)?.text?.let { anniversaryText ->
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = anniversaryText,

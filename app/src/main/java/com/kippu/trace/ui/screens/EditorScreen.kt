@@ -50,6 +50,7 @@ import com.kippu.trace.ui.components.AnniversarySettings
 import com.kippu.trace.ui.components.AnniversarySettingsState
 import com.kippu.trace.ui.components.PinnedEventCard
 import com.kippu.trace.ui.theme.KIPPU_TraceTheme
+import com.kippu.trace.utils.AnniversaryUtils
 import com.kippu.trace.utils.FileUtils
 import com.kippu.trace.utils.TextUtils
 import com.kippu.trace.utils.TimeUtils
@@ -69,7 +70,7 @@ fun EditorScreen(
     // 使用新版 TextFieldState
     val titleState = rememberTextFieldState("")
     
-    var selectedDate by remember { mutableLongStateOf(com.kippu.trace.utils.AnniversaryUtils.millis(LocalDate.now())) }
+    var selectedDate by remember { mutableLongStateOf(AnniversaryUtils.millis(LocalDate.now())) }
     var backgroundUri by remember { mutableStateOf<String?>(null) }
     var isPinned by remember { mutableStateOf(false) }
     var maskOpacity by remember { mutableFloatStateOf(0.4f) }
@@ -77,7 +78,7 @@ fun EditorScreen(
     var dayChangeMinutes by remember { mutableIntStateOf(0) }
     val showDayChangeDialog = remember { mutableStateOf(false) }
     var mode by remember { mutableStateOf(DisplayMode.ACCUMULATE) }
-    var cycleSettings by remember { mutableStateOf(AnniversarySettingsState()) }
+    val cycleSettings = remember { AnniversarySettingsState() }
 
     val scrollState = rememberScrollState()
 
@@ -103,7 +104,7 @@ fun EditorScreen(
 
     // 全屏预览与详情页共用纪念日文案规则
     val previewAnniversaryText = if (mode == DisplayMode.ACCUMULATE) {
-        TimeUtils.formatAnniversary(
+        TimeUtils.getAnniversaryText(
             context,
             cycleSettings.applyTo(DateEvent(
                 title = "",
@@ -111,7 +112,7 @@ fun EditorScreen(
                 isFuture = false,
                 mode = mode
             ))
-        )
+        )?.text
     } else null
 
     val formattedDate = remember(targetLocalDate) {

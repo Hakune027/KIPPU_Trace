@@ -5,6 +5,8 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.kippu.trace.model.DateEvent
+import com.kippu.trace.utils.AnniversaryUtils
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -28,9 +30,9 @@ interface EventDao {
     suspend fun updateEvents(events: List<DateEvent>)
 
     @Transaction
-    suspend fun advanceRepeatingEvents(today: java.time.LocalDate = java.time.LocalDate.now()) {
+    suspend fun advanceRepeatingEvents(today: LocalDate = LocalDate.now()) {
         val changed = getAllEventsOnce().mapNotNull { event ->
-            com.kippu.trace.utils.AnniversaryUtils.advance(event, today).takeIf { it != event }
+            AnniversaryUtils.advance(event, today).takeIf { it != event }
         }
         if (changed.isNotEmpty()) updateEvents(changed)
     }

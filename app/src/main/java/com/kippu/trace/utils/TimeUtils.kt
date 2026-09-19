@@ -162,18 +162,6 @@ object TimeUtils {
         return String.format(Locale.getDefault(), "%02d:%02d", safe / 60, safe % 60)
     }
 
-    // ===== 累计模式的纪念日 =====
-
-    // 自定义：累计天数达到 N 的倍数时，返回「几个 N 天」
-    fun getCustomMilestoneCount(targetDateMillis: Long, customDays: Int): Long {
-        return AnniversaryUtils.customCount(targetDateMillis, customDays)
-    }
-
-    // 预设：按日历日期匹配（不是数天数），返回年/月/周
-    fun getCalendarAnniversary(targetDateMillis: Long): CalendarAnniversaryResult {
-        return AnniversaryUtils.calendar(targetDateMillis)
-    }
-
     // 累计模式下的纪念日显示文字；返回 null 表示用普通天数
     fun getAnniversaryText(
         context: Context,
@@ -189,9 +177,12 @@ object TimeUtils {
                 } else {
                     event.anniversaryMessage.takeIf { it.isNotBlank() }?.let(::AnniversaryTextResult)
                         ?: run {
-                            val prefix = context.getString(R.string.anniversary_custom_prefix, event.customDays)
+                            val daysToken = event.customDays.toString()
+                            val prefix = context.getString(R.string.anniversary_custom_prefix)
+                                .replace("{days}", daysToken)
                             val countText = count.toString()
-                            val suffix = context.getString(R.string.anniversary_custom_suffix, event.customDays)
+                            val suffix = context.getString(R.string.anniversary_custom_suffix)
+                                .replace("{days}", daysToken)
                             AnniversaryTextResult(
                                 text = prefix + countText + suffix,
                                 counters = listOf(AnniversaryCounterText(prefix, countText, suffix)),
@@ -240,10 +231,4 @@ object TimeUtils {
             AnniversaryType.NONE -> null
         }
     }
-
-    fun formatAnniversary(
-        context: Context,
-        event: DateEvent,
-        today: LocalDate = getEffectiveToday(rolloverMinutes = event.dayChangeMinutes),
-    ): String? = getAnniversaryText(context, event, today)?.text
 }
