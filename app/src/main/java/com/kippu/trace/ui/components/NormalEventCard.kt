@@ -33,6 +33,7 @@ fun NormalEventCard(
     nowMillis: Long = System.currentTimeMillis(),
 ) {
     val context = LocalContext.current
+    val targetDateText = TimeUtils.formatEventDate(context, event)
     val rolloverMinutes = event.dayChangeMinutes
 
     val targetLocalDate = Instant.ofEpochMilli(event.targetDate)
@@ -90,7 +91,7 @@ fun NormalEventCard(
                         ),
                     )
                     Text(
-                        text = targetLocalDate.toString(),
+                        text = targetDateText,
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.secondary,
                         ),
@@ -170,7 +171,7 @@ fun NormalEventCard(
 
                 // 这个排版下的日期描述 移至左下角
                 Text(
-                    text = if (isCountdownToday) targetLocalDate.toString() else "$prefix $timeDescription",
+                    text = if (isCountdownToday) targetDateText else "$prefix $timeDescription",
                     modifier = Modifier.align(Alignment.BottomStart).padding(bottom = 6.dp),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         color = MaterialTheme.colorScheme.secondary
@@ -227,7 +228,7 @@ fun NormalEventCard(
                         )
                     )
                     Text(
-                        text = if (isCountdownToday) targetLocalDate.toString() else "$prefix $timeDescription",
+                        text = if (isCountdownToday) targetDateText else "$prefix $timeDescription",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.secondary
                         )

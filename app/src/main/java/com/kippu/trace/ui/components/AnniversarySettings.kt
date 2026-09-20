@@ -1,18 +1,16 @@
 package com.kippu.trace.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -22,9 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kippu.trace.R
 import com.kippu.trace.model.AnniversaryType
@@ -162,6 +158,9 @@ fun AnniversarySettings(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateContentSize(
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            )
                             .clip(RoundedCornerShape(20.dp))
                             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f))
                             .padding(16.dp),
@@ -229,6 +228,9 @@ fun AnniversarySettings(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .animateContentSize(
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                            )
                             .clip(RoundedCornerShape(20.dp))
                             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.035f))
                             .padding(16.dp),
@@ -259,69 +261,18 @@ private fun AnniversaryTypeSwitcher(
     selected: AnniversaryType,
     onSelected: (AnniversaryType) -> Unit,
 ) {
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .background(
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
-                RoundedCornerShape(26.dp),
+    SlidingSegmentedControl(
+        options = listOf(
+            SlidingSegmentOption(stringResource(R.string.anniversary_days_tab)),
+            SlidingSegmentOption(stringResource(R.string.anniversary_preset_tab)),
+        ),
+        selectedIndex = if (selected == AnniversaryType.CUSTOM_DAYS) 0 else 1,
+        onSelected = { index ->
+            onSelected(
+                if (index == 0) AnniversaryType.CUSTOM_DAYS else AnniversaryType.CALENDAR,
             )
-            .padding(4.dp),
-    ) {
-        val indicatorWidth = maxWidth / 2
-        val indicatorOffset by animateDpAsState(
-            targetValue = if (selected == AnniversaryType.CUSTOM_DAYS) 0.dp else indicatorWidth,
-            animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            label = "anniversaryTypeIndicator",
-        )
-
-        Box(
-            modifier = Modifier
-                .offset { IntOffset(indicatorOffset.roundToPx(), 0) }
-                .width(indicatorWidth)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp)),
-        )
-
-        Row(modifier = Modifier.fillMaxSize()) {
-            AnniversaryTypeOption(
-                title = stringResource(R.string.anniversary_days_tab),
-                selected = selected == AnniversaryType.CUSTOM_DAYS,
-                onClick = { onSelected(AnniversaryType.CUSTOM_DAYS) },
-                modifier = Modifier.weight(1f),
-            )
-            AnniversaryTypeOption(
-                title = stringResource(R.string.anniversary_preset_tab),
-                selected = selected == AnniversaryType.CALENDAR,
-                onClick = { onSelected(AnniversaryType.CALENDAR) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun AnniversaryTypeOption(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(22.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        )
-    }
+        },
+    )
 }
 
 @Composable
@@ -343,52 +294,11 @@ private fun RepeatModeSelector(selected: RepeatMode, onSelected: (RepeatMode) ->
         RepeatMode.WEEKLY to R.string.anniversary_unit_week,
         RepeatMode.CUSTOM_DAYS to R.string.day_unit,
     )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        options.forEach { (repeat, label) ->
-            RepeatModeOption(
-                title = stringResource(label),
-                selected = repeat == selected,
-                onClick = { onSelected(repeat) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun RepeatModeOption(
-    title: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .height(48.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(
-                if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surface,
-            )
-            .border(
-                width = 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(16.dp),
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        )
-    }
+    SlidingSegmentedControl(
+        options = options.map { (_, label) -> SlidingSegmentOption(stringResource(label)) },
+        selectedIndex = options.indexOfFirst { (repeat) -> repeat == selected }.coerceAtLeast(0),
+        onSelected = { index -> onSelected(options[index].first) },
+    )
 }
 
 @Composable

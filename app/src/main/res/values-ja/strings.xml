@@ -27,13 +27,11 @@
     <string name="confirm_import">復元の確認</string>
     <string name="import_warning">バックアップを復元すると、現在の記録はすべて置き換えられます。この操作は取り消せません。続行しますか？</string>
     <string name="confirm_import_button">復元する</string>
-    <string name="please_wait">しばらくお待ちください</string>
     <string name="processing">処理しています…</string>
     <string name="complete">完了</string>
     <string name="error">エラー</string>
     <string name="local_backup_subtitle">端末内で書き出し・復元</string>
     <string name="about_maintenance">Maintained by KIPPU</string>
-    <string name="feature_developing">「%1$s」は現在開発中です。</string>
     <string name="widget_2x2_name">TimeTrace ウィジェット 2x2</string>
     <string name="widget_3x2_name">TimeTrace ウィジェット 3x2</string>
     <string name="widget_4x2_name">TimeTrace ウィジェット 4x2</string>
@@ -98,7 +96,6 @@
     <string name="anniversary_custom_days_label">カスタム期間（N 日）</string>
     <string name="widget_select_title">表示するカードを選択</string>
     <string name="widget_no_cards">カードがありません</string>
-    <string name="widget_configure_label">カードを変更</string>
     <string name="pinned_label">▷ 固定</string>
     <string name="time_separator"> </string>
     <string name="time_years">%d年</string>
@@ -112,6 +109,14 @@
     <string name="restore_failed">復元に失敗しました: %s</string>
     <string name="unknown_error">不明なエラー</string>
     <string name="select_date">日付を選択</string>
+    <string name="solar_calendar">新暦</string>
+    <string name="lunar_calendar">旧暦</string>
+    <string name="lunar_date_format">旧暦 %1$d年%2$s月%3$d日</string>
+    <string name="lunar_date_compact_format">旧暦 %1$d/%2$s/%3$d</string>
+    <string name="lunar_leap_month">閏%1$d</string>
+    <string name="lunar_month_header">旧暦 %1$d年%2$s月</string>
+    <string name="previous_month">前の月</string>
+    <string name="next_month">次の月</string>
     <string name="repeat_section">繰り返し</string>
     <string name="cycle_settings">周期設定</string>
     <string name="cycle_settings_subtitle">記念日または繰り返し周期を変更</string>

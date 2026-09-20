@@ -47,6 +47,20 @@ data class AnniversaryTextResult(
 
 object TimeUtils {
 
+    fun formatEventDate(context: Context, event: DateEvent): String {
+        return formatDate(context, event.targetDate, event.isLunar)
+    }
+
+    fun formatDate(context: Context, millis: Long, isLunar: Boolean): String {
+        return if (isLunar) LunarUtils.format(context, millis)
+        else AnniversaryUtils.date(millis).toString()
+    }
+
+    fun formatCompactDate(context: Context, millis: Long, isLunar: Boolean): String {
+        return if (isLunar) LunarUtils.formatCompact(context, millis)
+        else AnniversaryUtils.date(millis).toString()
+    }
+
     // 正确处理时区
 
     /**
@@ -68,6 +82,14 @@ object TimeUtils {
     // 两个日历日之间相差的天数
     fun getDayCount(today: LocalDate, targetDate: LocalDate): Long {
         return abs(ChronoUnit.DAYS.between(today, targetDate))
+    }
+
+    fun getDisplayMode(targetDateMillis: Long, today: LocalDate): DisplayMode {
+        return if (AnniversaryUtils.date(targetDateMillis).isAfter(today)) {
+            DisplayMode.COUNT_DOWN
+        } else {
+            DisplayMode.ACCUMULATE
+        }
     }
 
     // 返回严格晚于 nowMillis 的下一个 日期变更时间 时间戳
@@ -191,7 +213,7 @@ object TimeUtils {
                 }
             }
             AnniversaryType.CALENDAR -> {
-                val result = AnniversaryUtils.calendar(event.targetDate, today)
+                val result = AnniversaryUtils.calendar(event, today)
                 val counters = buildList {
                     if (event.showYear && result.years > 0) {
                         add(AnniversaryCounterText(

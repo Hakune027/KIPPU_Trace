@@ -32,6 +32,7 @@ Similar to traditional countdown apps, this application aims to help users recor
 - **Pin to Top**: Supports pinning crucial events to the top of the home screen, presented with an even more beautiful visual effect
 - **Detailed View**: Supports custom background images and adjustable overlay opacity, offering a full-screen, highly immersive poster-like preview experience
 - **Editor Preview**: While creating your own TimeTrace in the editor, you can preview exactly how the card and detailed view will look in real time.
+- **Lunar Calendar**: Switch between Gregorian and lunar dates, including leap months and lunar recurrence
 - **Theme Switching**: Full support for Dark and Light modes, seamlessly adapting to the system theme
 - **Multi-language Support**: Natively supports Simplified Chinese, English, and Japanese, with more languages coming in future updates.
 - **Data Security**: Users can package all current configurations into a single ZIP file with a single tap, and easily restore their cards by importing the ZIP file

@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.kippu.trace.ui.components.AnniversarySettings
 import com.kippu.trace.ui.components.AnniversarySettingsState
+import com.kippu.trace.ui.components.DateSelectionDialog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -89,7 +90,6 @@ fun DetailScreen(
     // 日期选择
     var showDatePicker by remember { mutableStateOf(false) }
     var showCycleSettings by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState()
 
     // 标题编辑
     var showTitleEditDialog by remember { mutableStateOf(false) }
@@ -460,108 +460,34 @@ fun DetailScreen(
             }
         }
 
-        // 小一些的日期选择器
         if (showDatePicker) {
             val editingEvent = events[pagerState.currentPage % events.size]
-            LaunchedEffect(editingEvent.id) { datePickerState.selectedDateMillis = editingEvent.targetDate }
-            androidx.compose.ui.window.Dialog(
-                onDismissRequest = { showDatePicker = false },
-                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 0.dp,
-                    modifier = Modifier
-                        // 手机上默认 320dp，在大屏（如 Pad）下最高可扩展至 480dp
-                        .widthIn(min = 320.dp, max = 480.dp)
-                        .fillMaxWidth(0.85f)
-                        .heightIn(max = 720.dp).verticalScroll(rememberScrollState())
-                ) {
-                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                        val scope = this
-                        // 根据容器实际宽度计算缩放比例。360dp 是 DatePicker 完整显示所需的理想宽度
-                        val scale = (scope.maxWidth / 360.dp).coerceIn(0.88f, 1.1f)
-                        
-                        Column(
-                            modifier = Modifier.padding(top = 20.dp, bottom = 0.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = stringResource(R.string.select_date),
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                modifier = Modifier
-                                    .align(Alignment.Start)
-                                    .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
-                            )
-                            
-                            Box(
-                                modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                // 通过局部覆盖 Typography 来拉开星期与日期之间的间隙
-                                MaterialTheme(
-                                    colorScheme = MaterialTheme.colorScheme,
-                                    shapes = MaterialTheme.shapes,
-                                    typography = MaterialTheme.typography.copy(
-                                        labelLarge = MaterialTheme.typography.labelLarge.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 48.sp
-                                        )
-                                    )
-                                ) {
-                                    DatePicker(
-                                        state = datePickerState,
-                                        title = null,
-                                        headline = null,
-                                        showModeToggle = false,
-                                        colors = DatePickerDefaults.colors(
-                                            containerColor = MaterialTheme.colorScheme.surface,
-                                            dividerColor = Color.Transparent
-                                        ),
-                                        modifier = Modifier
-                                            // 强制指定 DatePicker 宽度为 360dp 以防止其内部日期列丢失
-                                            .requiredWidth(360.dp)
-                                            // 缩放以适配外部 Surface 容器
-                                            .scale(scale)
-                                            // 向上偏移，减少与标题的间距
-                                            .offset(y = (-12).dp)
-                                    )
-                                }
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp)
-                                    // 向上偏移，减少与日历底部的间距
-                                    .padding(top = 8.dp),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                TextButton(onClick = { showDatePicker = false }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                                TextButton(onClick = {
-                                    val selectedMillis = datePickerState.selectedDateMillis
-                                    if (selectedMillis != null) {
-                                        val realIndex = pagerState.currentPage % events.size
-                                        val currentEvent = events.getOrNull(realIndex)
-                                        if (currentEvent != null) {
-                                            onUpdateEvent(currentEvent.copy(
-                                                targetDate = selectedMillis,
-                                                repeatAnchorDate = if (selectedMillis == currentEvent.targetDate) currentEvent.repeatAnchorDate else null
-                                            ))
-                                        }
-                                    }
-                                    showDatePicker = false
-                                }) {
-                                    Text(stringResource(R.string.confirm))
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            DateSelectionDialog(
+                initialDateMillis = editingEvent.targetDate,
+                initialIsLunar = editingEvent.isLunar,
+                onConfirm = { selection ->
+                    val selectedMode = TimeUtils.getDisplayMode(
+                        targetDateMillis = selection.millis,
+                        today = TimeUtils.getEffectiveToday(
+                            rolloverMinutes = editingEvent.dayChangeMinutes,
+                        ),
+                    )
+                    onUpdateEvent(
+                        editingEvent.copy(
+                            targetDate = selection.millis,
+                            isFuture = selectedMode == DisplayMode.COUNT_DOWN,
+                            isLunar = selection.isLunar,
+                            mode = selectedMode,
+                            repeatAnchorDate = if (
+                                selection.millis == editingEvent.targetDate &&
+                                selection.isLunar == editingEvent.isLunar
+                            ) editingEvent.repeatAnchorDate else null,
+                        )
+                    )
+                    showDatePicker = false
+                },
+                onDismiss = { showDatePicker = false },
+            )
         }
     }
 }
@@ -673,6 +599,9 @@ fun EventDetailItem(
     val graphicsLayer = rememberGraphicsLayer()
     val rolloverMinutes = event.dayChangeMinutes
     val targetLocalDate = Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.of("UTC")).toLocalDate()
+    val targetDateText = remember(event.targetDate, event.isLunar, context) {
+        TimeUtils.formatEventDate(context, event)
+    }
     val today = TimeUtils.getEffectiveToday(rolloverMinutes = rolloverMinutes)
     val days = TimeUtils.getDayCount(today, targetLocalDate)
 
@@ -818,7 +747,7 @@ fun EventDetailItem(
             
             val datePrefix = if (event.isFuture) stringResource(R.string.label_from) else stringResource(R.string.label_since_date)
             Text(
-                text = "$datePrefix $targetLocalDate",
+                text = "$datePrefix $targetDateText",
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp),
                 style = MaterialTheme.typography.bodyMedium.copy(

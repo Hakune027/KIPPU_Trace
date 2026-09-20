@@ -99,7 +99,7 @@
                 android:shadowDx="0"
                 android:shadowDy="2"
                 android:shadowRadius="8"
-                android:text="--"
+                android:text="@string/widget_no_date"
                 android:textColor="#FFFFFFFF"
                 android:textStyle="bold" />
 

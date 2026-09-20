@@ -24,11 +24,9 @@ import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.utils.LanguageMode
 import com.kippu.trace.utils.LanguagePreferences
 import com.kippu.trace.utils.AnniversaryTextResult
+import com.kippu.trace.utils.AnniversaryUtils
 import com.kippu.trace.utils.TextUtils
 import com.kippu.trace.utils.TimeUtils
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,7 +39,6 @@ object TraceWidgetUpdater {
     private const val PREFS_NAME = "trace_widget_prefs"
     private const val PREF_PREFIX_KEY = "appwidget_"
     private val updateScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
     const val ACTION_ROLLOVER = "com.kippu.trace.action.DAY_ROLLOVER"
     private const val ROLLOVER_REQUEST_CODE = 1001
@@ -222,9 +219,9 @@ object TraceWidgetUpdater {
             // 有效状态显示并填充数据
             views.setViewVisibility(R.id.widget_title, View.VISIBLE)
 
-            val dateText = formatTargetDate(event.targetDate)
             val dayCount = calculateDays(event.dayChangeMinutes, event.targetDate)
             val localizedCtx = getLocalizedContext(context)
+            val dateText = TimeUtils.formatEventDate(localizedCtx, event)
             val isCountdownToday = event.mode == DisplayMode.COUNT_DOWN && dayCount == 0L
             val days = dayCount.toString()
             val prefix = localizedCtx.getString(if (event.isFuture) R.string.label_until else R.string.label_since)
@@ -413,18 +410,8 @@ object TraceWidgetUpdater {
     }
 
     private fun calculateDays(dayChangeMinutes: Int, targetDateMillis: Long): Long {
-        val targetLocalDate = Instant.ofEpochMilli(targetDateMillis)
-            .atZone(ZoneId.of("UTC"))
-            .toLocalDate()
         val today = TimeUtils.getEffectiveToday(rolloverMinutes = dayChangeMinutes)
-        return TimeUtils.getDayCount(today, targetLocalDate)
-    }
-
-    private fun formatTargetDate(targetDateMillis: Long): String {
-        return Instant.ofEpochMilli(targetDateMillis)
-            .atZone(ZoneId.of("UTC"))
-            .toLocalDate()
-            .format(dateFormatter)
+        return TimeUtils.getDayCount(today, AnniversaryUtils.date(targetDateMillis))
     }
 
     private fun dpToPx(context: Context, dp: Int): Int {

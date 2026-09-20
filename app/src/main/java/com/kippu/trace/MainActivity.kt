@@ -1,6 +1,5 @@
 package com.kippu.trace
 
-import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration

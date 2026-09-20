@@ -3,12 +3,8 @@ package com.kippu.trace.ui.screens
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,10 +23,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -40,15 +34,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
 import com.kippu.trace.ui.components.AnniversarySettings
 import com.kippu.trace.ui.components.AnniversarySettingsState
+import com.kippu.trace.ui.components.AutoSizeSingleLineText
+import com.kippu.trace.ui.components.DateSelectionDialog
 import com.kippu.trace.ui.components.PinnedEventCard
+import com.kippu.trace.ui.components.SlidingSegmentOption
+import com.kippu.trace.ui.components.SlidingSegmentedControl
 import com.kippu.trace.ui.theme.KIPPU_TraceTheme
 import com.kippu.trace.utils.AnniversaryUtils
 import com.kippu.trace.utils.FileUtils
@@ -57,7 +53,6 @@ import com.kippu.trace.utils.TimeUtils
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +66,7 @@ fun EditorScreen(
     val titleState = rememberTextFieldState("")
     
     var selectedDate by remember { mutableLongStateOf(AnniversaryUtils.millis(LocalDate.now())) }
+    var isLunar by remember { mutableStateOf(false) }
     var backgroundUri by remember { mutableStateOf<String?>(null) }
     var isPinned by remember { mutableStateOf(false) }
     var maskOpacity by remember { mutableFloatStateOf(0.4f) }
@@ -110,93 +106,37 @@ fun EditorScreen(
                 title = "",
                 targetDate = selectedDate,
                 isFuture = false,
+                isLunar = isLunar,
                 mode = mode
             ))
         )?.text
     } else null
 
-    val formattedDate = remember(targetLocalDate) {
-        targetLocalDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    val formattedDate = remember(selectedDate, isLunar, context) {
+        TimeUtils.formatDate(context, selectedDate, isLunar)
+    }
+    val compactFormattedDate = remember(selectedDate, isLunar, context) {
+        TimeUtils.formatCompactDate(context, selectedDate, isLunar)
     }
 
     val untitledText = stringResource(R.string.untitled)
     val sampleTitleText = stringResource(R.string.sample_title)
 
     if (showDatePicker.value) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate)
-
-        Dialog(
-            onDismissRequest = { showDatePicker.value = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 0.dp,
-                modifier = Modifier
-                    // 手机上默认 320dp，在大屏（如 Pad）下最高可扩展至 480dp
-                    .widthIn(min = 320.dp, max = 480.dp)
-                    .fillMaxWidth(0.85f)
-                    .heightIn(max = 720.dp).verticalScroll(rememberScrollState())
-            ) {
-                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                    val scope = this
-                    // 根据容器实际宽度计算缩放比例。360dp 是 DatePicker 完整显示所需的理想宽度。
-                    val scale = (scope.maxWidth / 360.dp).coerceIn(0.88f, 1.1f)
-                    
-                    Column(
-                        modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(R.string.select_date),
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier
-                                .align(Alignment.Start)
-                                .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
-                        )
-
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            DatePicker(
-                                state = datePickerState,
-                                title = null,
-                                headline = null,
-                                showModeToggle = false,
-                                colors = DatePickerDefaults.colors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    dividerColor = Color.Transparent
-                                ),
-                                modifier = Modifier
-                                    // 强制指定 DatePicker 宽度为 360dp 以防止其内部日期列丢失
-                                    .requiredWidth(360.dp)
-                                    // 缩放以适配外部 Surface 容器
-                                    .scale(scale)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.End
-                        ) {
-                            TextButton(onClick = { showDatePicker.value = false }) {
-                                Text(stringResource(R.string.cancel))
-                            }
-                            TextButton(onClick = {
-                                datePickerState.selectedDateMillis?.let { selectedDate = it }
-                                showDatePicker.value = false
-                            }) {
-                                Text(stringResource(R.string.confirm))
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        DateSelectionDialog(
+            initialDateMillis = selectedDate,
+            initialIsLunar = isLunar,
+            onConfirm = {
+                selectedDate = it.millis
+                isLunar = it.isLunar
+                mode = TimeUtils.getDisplayMode(
+                    targetDateMillis = it.millis,
+                    today = TimeUtils.getEffectiveToday(rolloverMinutes = dayChangeMinutes),
+                )
+                showDatePicker.value = false
+            },
+            onDismiss = { showDatePicker.value = false },
+        )
     }
 
     if (showDayChangeDialog.value) {
@@ -225,6 +165,7 @@ fun EditorScreen(
                             title = titleState.text.toString().ifEmpty { untitledText },
                             targetDate = selectedDate,
                             isFuture = mode == DisplayMode.COUNT_DOWN,
+                            isLunar = isLunar,
                             mode = mode,
                             isPinned = isPinned,
                             backgroundUri = backgroundUri,
@@ -312,7 +253,10 @@ fun EditorScreen(
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(stringResource(if (mode == DisplayMode.COUNT_DOWN) R.string.target_date_label else R.string.start_date_label), style = MaterialTheme.typography.labelMedium)
-                            Text(formattedDate, style = MaterialTheme.typography.titleMedium)
+                            AutoSizeSingleLineText(
+                                text = compactFormattedDate,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                         }
                     }
 
@@ -358,7 +302,7 @@ fun EditorScreen(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 40.dp)
+                            modifier = Modifier.padding(end = 24.dp)
                         )
                     }
                 }
@@ -414,6 +358,7 @@ fun EditorScreen(
                                     title = titleState.text.toString().ifEmpty { sampleTitleText },
                                     targetDate = selectedDate,
                                     isFuture = mode == DisplayMode.COUNT_DOWN,
+                                    isLunar = isLunar,
                                     mode = mode,
                                     isPinned = true,
                                     backgroundUri = backgroundUri,
@@ -458,89 +403,16 @@ fun ModeSwitcher(
     selectedMode: DisplayMode,
     onModeSelected: (DisplayMode) -> Unit
 ) {
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .background(
-                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.03f),
-                RoundedCornerShape(26.dp)
-            )
-            .padding(4.dp)
-    ) {
-        val scope = this
-        val indicatorWidth = scope.maxWidth / 2
-        val indicatorOffset by animateDpAsState(
-            targetValue = if (selectedMode == DisplayMode.COUNT_DOWN) 0.dp else indicatorWidth,
-            animationSpec = spring(stiffness = Spring.StiffnessMedium),
-            label = "modeIndicator"
-        )
-
-        // 滑动指示器
-        Box(
-            modifier = Modifier
-                .offset(x = indicatorOffset)
-                .width(indicatorWidth)
-                .fillMaxHeight()
-                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(22.dp))
-        )
-
-        Row(modifier = Modifier.fillMaxSize()) {
-            ModeOption(
-                title = stringResource(R.string.countdown_mode),
-                icon = Icons.Default.HourglassEmpty,
-                selected = selectedMode == DisplayMode.COUNT_DOWN,
-                onClick = { onModeSelected(DisplayMode.COUNT_DOWN) },
-                modifier = Modifier.weight(1f)
-            )
-            ModeOption(
-                title = stringResource(R.string.accumulate_mode),
-                icon = Icons.Default.History,
-                selected = selectedMode == DisplayMode.ACCUMULATE,
-                onClick = { onModeSelected(DisplayMode.ACCUMULATE) },
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-fun ModeOption(
-    title: String,
-    icon: ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .clip(RoundedCornerShape(22.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        val contentColor = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        }
-        
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                color = contentColor
-            )
-        }
-    }
+    SlidingSegmentedControl(
+        options = listOf(
+            SlidingSegmentOption(stringResource(R.string.countdown_mode), Icons.Default.HourglassEmpty),
+            SlidingSegmentOption(stringResource(R.string.accumulate_mode), Icons.Default.History),
+        ),
+        selectedIndex = if (selectedMode == DisplayMode.COUNT_DOWN) 0 else 1,
+        onSelected = {
+            onModeSelected(if (it == 0) DisplayMode.COUNT_DOWN else DisplayMode.ACCUMULATE)
+        },
+    )
 }
 
 @Composable
