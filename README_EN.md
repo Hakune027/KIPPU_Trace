@@ -29,12 +29,14 @@ Similar to traditional countdown apps, this application aims to help users recor
 ## Core Features
 
 - **Record Cards**: Designed using the Material 3 design language, featuring three distinct layouts that dynamically adapt to the length of the title entered by the user
-- **Pin to Top**: Supports pinning crucial events to the top of the home screen, presented with an even more beautiful visual effect
+- **Pin to Top**: Supports pinning crucial events to the top of the home screen, presented with an even more beautiful visual display
 - **Detailed View**: Supports custom background images and adjustable overlay opacity, offering a full-screen, highly immersive poster-like preview experience
-- **Editor Preview**: While creating your own TimeTrace in the editor, you can preview exactly how the card and detailed view will look in real time.
+- **Editor Preview**: While creating your own TimeTrace in the editor, you can preview exactly how the card and detailed view will look in real time
 - **Lunar Calendar**: Switch between Gregorian and lunar dates, including leap months and lunar recurrence
+- **Commemorative Days**: When creating cards in cumulative mode, you can customize specific milestones to celebrate special day counts
+- **Repeat Cycles**: When creating cards in countdown mode, you can set custom recurring cycles if you want the countdown to repeat
 - **Theme Switching**: Full support for Dark and Light modes, seamlessly adapting to the system theme
-- **Multi-language Support**: Natively supports Simplified Chinese, English, and Japanese, with more languages coming in future updates.
+- **Multi-language Support**: Natively supports Simplified Chinese, English, and Japanese, with more languages coming in future updates
 - **Data Security**: Users can package all current configurations into a single ZIP file with a single tap, and easily restore their cards by importing the ZIP file
 
 ## Quick Start
