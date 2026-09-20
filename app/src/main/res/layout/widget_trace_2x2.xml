@@ -64,13 +64,6 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/widget_anniversary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:includeFontPadding="false"
-                android:visibility="gone" />
-
-            <TextView
                 android:id="@+id/widget_date"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -106,7 +99,7 @@
                 android:shadowDx="0"
                 android:shadowDy="2"
                 android:shadowRadius="8"
-                android:text="--"
+                android:text="@string/widget_no_date"
                 android:textColor="#FFFFFFFF"
                 android:textStyle="bold" />
 

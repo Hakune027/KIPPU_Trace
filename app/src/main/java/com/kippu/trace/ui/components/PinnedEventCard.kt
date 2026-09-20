@@ -9,7 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,6 +54,7 @@ fun PinnedEventCard(
     val days = TimeUtils.getDayCount(today, targetLocalDate)
 
     val context = LocalContext.current
+    val targetDateText = TimeUtils.formatEventDate(context, event)
     val anniversary = TimeUtils.getAnniversaryText(context, event, today)
     val anniversaryText = anniversary?.text
 
@@ -98,7 +99,7 @@ fun PinnedEventCard(
                 val visualWidth = TextUtils.getVisualWidth(event.title)
                 
                 if (visualWidth > 15.0f && anniversaryText == null) {
-                    var titleLineCount by remember(event.title) { mutableStateOf(1) }
+                    var titleLineCount by remember(event.title) { mutableIntStateOf(1) }
 
                     // 类型 3：4 行 带超强淡出
                     Row(
@@ -156,7 +157,7 @@ fun PinnedEventCard(
                                 )
                             }
                             Text(
-                                text = targetLocalDate.toString(),
+                                text = targetDateText,
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     color = Color.White.copy(alpha = 0.7f),
                                     fontWeight = FontWeight.Normal
@@ -197,7 +198,7 @@ fun PinnedEventCard(
                                     verticalAlignment = Alignment.Bottom,
                                 ) {
                                     Text(
-                                        text = targetLocalDate.toString(),
+                                        text = targetDateText,
                                         style = MaterialTheme.typography.labelSmall.copy(
                                             color = Color.White.copy(alpha = 0.7f),
                                             fontWeight = FontWeight.Normal,
@@ -288,7 +289,7 @@ fun PinnedEventCard(
 
                             if (anniversaryText == null) {
                                 Text(
-                                    text = targetLocalDate.toString(),
+                                    text = targetDateText,
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         color = Color.White.copy(alpha = 0.7f),
                                         fontWeight = FontWeight.Normal
@@ -321,7 +322,7 @@ fun PinnedEventCard(
                                     )
                                 )
                                 Text(
-                                    text = targetLocalDate.toString(),
+                                    text = targetDateText,
                                     style = MaterialTheme.typography.labelMedium.copy(
                                         color = Color.White.copy(alpha = 0.8f),
                                         fontWeight = FontWeight.Normal

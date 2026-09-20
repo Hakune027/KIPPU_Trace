@@ -32,6 +32,11 @@ object AnniversaryUtils {
         )
     }
 
+    fun calendar(event: DateEvent, today: LocalDate = LocalDate.now()): CalendarAnniversaryResult {
+        return if (event.isLunar) LunarUtils.calendarAnniversary(event.targetDate, today)
+        else calendar(event.targetDate, today)
+    }
+
     /** Keep the due day visible as today; convert normal countdowns or advance repeating ones after expiry. */
     fun advance(event: DateEvent, today: LocalDate = LocalDate.now()): DateEvent {
         if (event.mode != DisplayMode.COUNT_DOWN || !date(event.targetDate).isBefore(today)) return event
@@ -49,17 +54,25 @@ object AnniversaryUtils {
         val interval = event.repeatInterval.toLong()
         val next = when (event.repeatMode) {
             RepeatMode.YEARLY -> {
-                val elapsed = (today.year - anchor.year).toLong().coerceAtLeast(0)
-                val count = elapsed / interval
-                anchor.plusYears(count * interval).let {
-                    if (it.isAfter(today)) it else anchor.plusYears((count + 1) * interval)
+                if (event.isLunar) {
+                    LunarUtils.nextYearly(anchorMillis, event.repeatInterval, today)
+                } else {
+                    val elapsed = (today.year - anchor.year).toLong().coerceAtLeast(0)
+                    val count = elapsed / interval
+                    anchor.plusYears(count * interval).let {
+                        if (it.isAfter(today)) it else anchor.plusYears((count + 1) * interval)
+                    }
                 }
             }
             RepeatMode.MONTHLY -> {
-                val elapsed = ChronoUnit.MONTHS.between(anchor.withDayOfMonth(1), today.withDayOfMonth(1)).coerceAtLeast(0)
-                val count = elapsed / interval
-                anchor.plusMonths(count * interval).let {
-                    if (it.isAfter(today)) it else anchor.plusMonths((count + 1) * interval)
+                if (event.isLunar) {
+                    LunarUtils.nextMonthly(anchorMillis, event.repeatInterval, today)
+                } else {
+                    val elapsed = ChronoUnit.MONTHS.between(anchor.withDayOfMonth(1), today.withDayOfMonth(1)).coerceAtLeast(0)
+                    val count = elapsed / interval
+                    anchor.plusMonths(count * interval).let {
+                        if (it.isAfter(today)) it else anchor.plusMonths((count + 1) * interval)
+                    }
                 }
             }
             RepeatMode.WEEKLY, RepeatMode.CUSTOM_DAYS -> {

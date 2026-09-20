@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,12 +29,7 @@ class WidgetConfigActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context?) {
         val mode = LanguagePreferences.getLanguageMode(newBase!!)
         val locale = when (mode) {
-            LanguageMode.SYSTEM -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                newBase.resources.configuration.locales[0]
-            } else {
-                @Suppress("DEPRECATION")
-                newBase.resources.configuration.locale
-            }
+            LanguageMode.SYSTEM -> newBase.resources.configuration.locales[0]
             LanguageMode.CHINESE -> Locale("zh")
             LanguageMode.ENGLISH -> Locale("en")
             LanguageMode.JAPANESE -> Locale("ja")

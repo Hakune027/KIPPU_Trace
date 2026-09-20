@@ -48,8 +48,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.kippu.trace.R
 import com.kippu.trace.model.DateEvent
 import com.kippu.trace.model.DisplayMode
@@ -59,11 +57,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.kippu.trace.ui.components.AnniversarySettings
 import com.kippu.trace.ui.components.AnniversarySettingsState
+import com.kippu.trace.ui.components.AutoSizeSingleLineText
+import com.kippu.trace.ui.components.DateSelectionDialog
 import com.kippu.trace.ui.components.NormalEventCard
 import com.kippu.trace.ui.components.PinnedEventCard
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -287,13 +284,26 @@ fun HomeScreen(
         }
 
         if (showEditDatePicker.value) {
-            EditDatePickerDialog(
+            DateSelectionDialog(
                 initialDateMillis = event.targetDate,
-                onConfirm = { millis ->
-                    editingEvent = editingEvent?.copy(
-                        targetDate = millis,
-                        repeatAnchorDate = if (millis == event.targetDate) event.repeatAnchorDate else null,
-                    )
+                initialIsLunar = event.isLunar,
+                onConfirm = { selection ->
+                    editingEvent = editingEvent?.let { current ->
+                        val selectedMode = TimeUtils.getDisplayMode(
+                            targetDateMillis = selection.millis,
+                            today = TimeUtils.getEffectiveToday(rolloverMinutes = current.dayChangeMinutes),
+                        )
+                        current.copy(
+                            targetDate = selection.millis,
+                            isFuture = selectedMode == DisplayMode.COUNT_DOWN,
+                            isLunar = selection.isLunar,
+                            mode = selectedMode,
+                            repeatAnchorDate = if (
+                                selection.millis == current.targetDate &&
+                                selection.isLunar == current.isLunar
+                            ) current.repeatAnchorDate else null,
+                        )
+                    }
                     showEditDatePicker.value = false
                 },
                 onDismiss = { showEditDatePicker.value = false }
@@ -396,11 +406,8 @@ fun HomeScreen(
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val editTargetLocalDate = remember(event.targetDate) {
-                        Instant.ofEpochMilli(event.targetDate).atZone(ZoneId.of("UTC")).toLocalDate()
-                    }
-                    val editFormattedDate = remember(editTargetLocalDate) {
-                        editTargetLocalDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                    val editFormattedDate = remember(event.targetDate, event.isLunar, context) {
+                        TimeUtils.formatCompactDate(context, event.targetDate, event.isLunar)
                     }
                     Card(
                         onClick = { showEditDatePicker.value = true },
@@ -413,7 +420,10 @@ fun HomeScreen(
                                 stringResource(if (event.mode == DisplayMode.COUNT_DOWN) R.string.target_date_label else R.string.start_date_label),
                                 style = MaterialTheme.typography.labelMedium
                             )
-                            Text(editFormattedDate, style = MaterialTheme.typography.titleMedium)
+                            AutoSizeSingleLineText(
+                                text = editFormattedDate,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                         }
                     }
 
@@ -462,7 +472,7 @@ fun HomeScreen(
                             style = MaterialTheme.typography.labelLarge, 
                             fontWeight = FontWeight.Bold,               
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(end = 40.dp)
+                            modifier = Modifier.padding(end = 24.dp)
                         )
                     }
                 }
@@ -636,75 +646,6 @@ fun SwipeActionWrapper(
             }
         }
         Box(modifier = Modifier.fillMaxWidth().offset { IntOffset(offsetX.value.roundToInt(), 0) }) { content() }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun EditDatePickerDialog(
-    initialDateMillis: Long,
-    onConfirm: (Long) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMillis)
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 0.dp,
-            modifier = Modifier
-                .widthIn(min = 320.dp, max = 480.dp)
-                .fillMaxWidth(0.85f)
-                .wrapContentHeight()
-        ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val scale = (this.maxWidth / 360.dp).coerceIn(0.88f, 1.1f)
-                Column(
-                    modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.select_date),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        modifier = Modifier
-                            .align(Alignment.Start)
-                            .padding(start = 20.dp, end = 20.dp, bottom = 8.dp)
-                    )
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        DatePicker(
-                            state = datePickerState,
-                            title = null,
-                            headline = null,
-                            showModeToggle = false,
-                            colors = DatePickerDefaults.colors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                dividerColor = Color.Transparent
-                            ),
-                            modifier = Modifier
-                                .requiredWidth(360.dp)
-                                .scale(scale)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = onDismiss) {
-                            Text(stringResource(R.string.cancel))
-                        }
-                        TextButton(onClick = {
-                            datePickerState.selectedDateMillis?.let { onConfirm(it) }
-                        }) {
-                            Text(stringResource(R.string.confirm))
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
